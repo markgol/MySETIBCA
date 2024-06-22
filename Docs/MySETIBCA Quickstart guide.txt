@@ -1,0 +1,12 @@
+Download and run the installer on a Windows computer.
+Use all the defaults.
+Run the application from the desktop icon or from the start menu, MySETIBCA
+If the ‘Margolus 2x2 block cellular automata’ dialog is not displayed then click on the Cellular Automata menu and select Margolus CA.
+In the dialog box click the ‘(Re)Load’ button.
+Click the Step Forward button.
+Adjust the image display to the size and zoom you want.
+The ctrlkey+mouse scrollbar zooms in and out.
+Left mouse button can be used to drag the image in the image display.
+Click Run FORWARD and you will see the ‘starmap’ transform into the ‘amino acid map’
+Clicking OK in the dialogs saves the current settings.
+Have fun.
