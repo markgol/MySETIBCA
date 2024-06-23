@@ -16,11 +16,13 @@
 // without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 // See the GNU General Public License for more details.
 // You should have received a copy of the GNU General Public License along with MySETIBCA.
-// If not, see < https://www.gnu.org/licenses/>. x
+// If not, see < https://www.gnu.org/licenses/>.
 // 
 // This file contains the dialog callback procedures for the Cellular Automata tools menu
 // 
 // V1.0.0	2024-06-21	Initial release
+// V1.0.1   2024-06-23  Changed BCA layer raw file input of color based raw image(3 frames)
+//                        to single single binary frame
 // 
 // Cellular Automata tools dialog box handlers
 // 
@@ -50,6 +52,9 @@
 #include "FileFunctions.h"
 #include "shellapi.h"
 
+#define BINARY_THRESHOLD 20
+void CollapseImageFrames(int* TheImage, IMAGINGHEADER* BCAimageHeader);
+
 // Add new callback prototype declarations in my MySETIBCA.cpp
 
 //*******************************************************************************
@@ -66,8 +71,6 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
     case WM_INITDIALOG:
     {
-        int GenerateBMP;
-
         IMAGINGHEADER ImageHeader;
 
         GetPrivateProfileString(L"MargolusBCADlg", L"ImageInput", L"Message.raw", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
@@ -83,13 +86,13 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             SetDlgItemInt(hDlg, IDC_NUM_FRAMES, 0, TRUE);
         }
 
-        GetPrivateProfileString(L"MargolusBCADlg", L"TextInput1", L"C:\MySETIBCA\Data\Rules\single point cw.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        GetPrivateProfileString(L"MargolusBCADlg", L"TextInput1", L"C:\\MySETIBCA\\Data\\Rules\\single point cw.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
         SetDlgItemText(hDlg, IDC_TEXT_INPUT1, szString);
 
-        GetPrivateProfileString(L"MargolusBCADlg", L"TextInput2", L"C:\MySETIBCA\Data\Rules\single point ccw.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        GetPrivateProfileString(L"MargolusBCADlg", L"TextInput2", L"C:\\MySETIBCA\\Data\\Rules\\single point ccw.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
         SetDlgItemText(hDlg, IDC_TEXT_INPUT2, szString);
 
-        GetPrivateProfileString(L"MargolusBCADlg", L"ImageOutput", L"C:\MySETIBCA\Data\Results\BCAresult.raw", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        GetPrivateProfileString(L"MargolusBCADlg", L"ImageOutput", L"C:\\MySETIBCA\\Data\\Results\\BCAresult.raw", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
         SetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString);
 
         GetPrivateProfileString(L"MargolusBCADlg", L"ForwardLimit", L"6625", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
@@ -268,7 +271,7 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             for (int i = 0; i < NumberSteps; i++) {
                 // step backward on iteration
                 EvenStep = !EvenStep;
-                bSuccess = MargolusBCAp1p1(EvenStep, TheImage,
+                MargolusBCAp1p1(EvenStep, TheImage,
                     BCAimageHeader.Xsize, BCAimageHeader.Ysize, BackwardRules);
                 CurrentIteration--;
                 if (CurrentIteration <= BackwardLimit) break;
@@ -319,7 +322,7 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
             for (int i = 0; i < NumberSteps; i++) {
                 // step forward on iteration
-                bSuccess = MargolusBCAp1p1(EvenStep, TheImage,
+                MargolusBCAp1p1(EvenStep, TheImage,
                     BCAimageHeader.Xsize, BCAimageHeader.Ysize, ForwardRules);
 
                 CurrentIteration++;
@@ -540,6 +543,12 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 MessageBox(hDlg, L"Image not loaded, x,y sizes must be even", L"File size error", MB_OK);
                 return (INT_PTR)TRUE;
             }
+            // check if this is 3 frame image (3 frame raw files are used as color images)
+            // If it is convert the 3 frames into the first frame as a binary 0 or 255
+            // handling of color images is possible in future update
+            if (BCAimageHeader.NumFrames == 3) {
+                CollapseImageFrames(TheImage, &BCAimageHeader);
+            }
 
             // update Layer 0 in display dialog
             ImageLayers->UpdateLayer(0, InputFile, TheImage, BCAimageHeader.Xsize, BCAimageHeader.Ysize);
@@ -687,4 +696,42 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
     
     }
     return (INT_PTR)FALSE;
+}
+
+//*******************************************************************************
+//
+// CollapseImageFrames
+// 
+// This is to convert color image from 3 frame raw file to single frame binary 0/255
+// Sum all 3 frames into the first frame.
+// Use Threshold to binarize
+// 
+// int* TheImage
+// IMAGINGHEADER* BCAimageHeader
+// 
+// no return parameter
+// 
+//*******************************************************************************
+void CollapseImageFrames(int* TheImage, IMAGINGHEADER* BCAimageHeader) {
+    int FrameOffset;
+    int x, y;
+    int Offset;
+
+    FrameOffset = BCAimageHeader->Xsize * BCAimageHeader->Ysize;
+
+    for (y = 0, Offset = 0; y < BCAimageHeader->Ysize; y++) {
+        for (x = 0; x < BCAimageHeader->Xsize; x++) {
+            TheImage[Offset + x] = TheImage[Offset + x] + TheImage[FrameOffset + Offset + x] +
+                TheImage[2 * FrameOffset + Offset + x];
+            if (TheImage[Offset + x] < BINARY_THRESHOLD) {
+                TheImage[Offset + x] = 0;
+            }
+            else {
+                TheImage[Offset + x] = 255;
+            }
+        }
+        Offset += BCAimageHeader->Xsize;
+    }
+    
+    return;
 }

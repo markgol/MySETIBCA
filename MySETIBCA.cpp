@@ -79,6 +79,12 @@
 //
 // 
 // V1.0.0	2024-06-21	Initial release
+// V1.0.1   2024-06-23  Fixed code error for return of type void instead of BOOL
+//                        when calling MargolusBCAp1p1()
+//                      Fixed installer conifiguration that kept 'repairing' the .cfg and .ini when 
+//                        the shortcut were used
+//                      Changed BCA layer raw file input of color based raw image(3 frames)
+//                        to single single binary frame
 // 
 //  This appliction stores user parameters in a Windows style .ini file
 //  The MySETIBCA.ini file must be in the same directory as the exectable
