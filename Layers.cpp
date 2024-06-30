@@ -20,6 +20,7 @@
 //
 // 
 // V1.0.0	2024-06-21	Initial release
+// V1.1.0	2024-06-28	Corrected loading of BMP files
 //
 //  This module is a copy of the Layers module used in MySETIviewer and customized
 //  for this application
@@ -131,12 +132,26 @@ int Layers::AddLayer(WCHAR* Filename) {
 	}
 
 	// try loading as .img file
+	int UseThisThreshold;
+
 	iRes = LoadImageFile(&Image, Filename, &ImageHeader);
-	if (iRes != APP_SUCCESS) {
-		iRes = LoadBMPfile(&Image, Filename, &ImageHeader);
+	if (iRes == APP_SUCCESS) {
+		UseThisThreshold = 1;
+	} else {
+		iRes = ReadBMPfile(&Image, Filename, &ImageHeader);
 		if (iRes != APP_SUCCESS) {
 			return iRes;
 		}
+		UseThisThreshold = BINARY_THRESHOLD;
+	}
+
+	// check if this is 3 frame image (3 frame raw files are used as color images)
+	// If it is convert the 3 frames into the first frame as a binary 0 or 255
+	if (ImageHeader.NumFrames == 3) {
+		CollapseImageFrames(Image, &ImageHeader, UseThisThreshold);
+	}
+	else {
+		BinarizeImage(Image, &ImageHeader, UseThisThreshold);
 	}
 
 	// save results in Layers class variables
@@ -215,12 +230,25 @@ int Layers::UpdateLayer(int LayerNumber, WCHAR* Filename, int *BCAimage, int Xsi
 
 	// try loading as .img file
 	int* Image;
+	int UseThisThreshold;
+
 	iRes = LoadImageFile(&Image, Filename, &ImageHeader);
-	if (iRes != APP_SUCCESS) {
-		iRes = LoadBMPfile(&Image, Filename, &ImageHeader);
+	if (iRes == APP_SUCCESS) {
+		UseThisThreshold = 1;
+	} else {
+		iRes = ReadBMPfile(&Image, Filename, &ImageHeader);
 		if (iRes != APP_SUCCESS) {
 			return iRes;
 		}
+		UseThisThreshold = BINARY_THRESHOLD;
+	}
+	// check if this is 3 frame image (3 frame raw files are used as color images)
+	// If it is convert the 3 frames into the first frame as a binary 0 or 255
+	if (ImageHeader.NumFrames == 3) {
+		CollapseImageFrames(Image, &ImageHeader, UseThisThreshold);
+	}
+	else {
+		BinarizeImage(Image, &ImageHeader, UseThisThreshold);
 	}
 	
 	// save results in Layers class variables

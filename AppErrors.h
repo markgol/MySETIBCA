@@ -17,3 +17,4 @@
 #define APPERR_FILETYPE -4
 #define APPERR_FILESIZE -5
 #define APPERR_NYI -6
+#define APPERR_FILEWRITE -7

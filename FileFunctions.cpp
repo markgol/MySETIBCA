@@ -20,6 +20,14 @@
 // 
 // 
 // V1.0.0	2024-06-21	Initial release
+// V1.1.0   2024-06-28  Added ASIS receive/send message
+//                      support functions added:
+//                          SaveBYTEs2Text()
+//                          ReadBYTEs2Text()
+//                          SaveASISbitstream()
+//                      Corrected bug when reading BMP files
+//                          ReadBMPfile() is corrected function
+//                          deleted LoadBMPfile()
 // 
 //  This module is a copy of the FileFunctions module used in MySETIviewer and customized
 //  for this application
@@ -1622,8 +1630,10 @@ int SaveImageBMP(WCHAR* Filename,COLORREF* Image, int ImageXextent, int ImageYex
 //  LoadBMPfile
 // 
 //****************************************************************
-int  LoadBMPfile(int** ImagePtr, WCHAR* InputFilename, IMAGINGHEADER* ImgHeader)
+int  ReadBMPfile(int** ImagePtr, WCHAR* InputFilename, IMAGINGHEADER* ImgHeader)
 {
+    int Invert = 0;
+
     // open BMP file
     FILE* BMPfile;
     errno_t ErrNum;
@@ -1642,13 +1652,13 @@ int  LoadBMPfile(int** ImagePtr, WCHAR* InputFilename, IMAGINGHEADER* ImgHeader)
     BYTE* Stride;
 
     iRes = (int)fread(&BMPheader, sizeof(BITMAPFILEHEADER), 1, BMPfile);
-    if (iRes != 1) {
+    if (iRes != APP_SUCCESS) {
         fclose(BMPfile);
         return APPERR_FILETYPE;
     }
 
     iRes = (int)fread(&BMPinfoheader, sizeof(BITMAPINFOHEADER), 1, BMPfile);
-    if (iRes != 1) {
+    if (iRes != APP_SUCCESS) {
         fclose(BMPfile);
         return APPERR_FILETYPE;
     }
@@ -1742,10 +1752,20 @@ int  LoadBMPfile(int** ImagePtr, WCHAR* InputFilename, IMAGINGHEADER* ImgHeader)
                 // split out bit by bit
                 Image[Offset + x] = Stride[StrideIndex] & (0x80 >> BitCount);
                 if (Image[Offset + x] != 0) {
-                    Image[Offset + x] = 1;
+                    if (Invert == 0) {
+                        Image[Offset + x] = 255;
+                    }
+                    else {
+                        Image[Offset + x] = 0;
+                    }
                 }
                 else {
-                    Image[Offset + x] = 0;
+                    if (Invert == 0) {
+                        Image[Offset + x] = 0;
+                    }
+                    else {
+                        Image[Offset + x] = 255;
+                    }
                 }
                 BitCount++;
                 if (BitCount == 8) {
@@ -1800,6 +1820,7 @@ int  LoadBMPfile(int** ImagePtr, WCHAR* InputFilename, IMAGINGHEADER* ImgHeader)
     else {
         // this is a 24 bit, RGB image
         // The color table is biClrUsed long
+        NumFrames = 3;
         if (BMPinfoheader.biClrUsed != 0) {
             // skip the color table if present
             if (fseek(BMPfile, sizeof(RGBQUAD) * BMPinfoheader.biClrUsed, SEEK_CUR) != 0) {
@@ -1809,7 +1830,7 @@ int  LoadBMPfile(int** ImagePtr, WCHAR* InputFilename, IMAGINGHEADER* ImgHeader)
             }
         }
 
-        Image = new int[(size_t)BMPinfoheader.biWidth * (size_t)BMPinfoheader.biHeight];
+        Image = new int[(size_t)BMPinfoheader.biWidth * (size_t)BMPinfoheader.biHeight * (size_t)3];
         if (Image == NULL) {
             delete[] Stride;
             fclose(BMPfile);
@@ -1839,7 +1860,9 @@ int  LoadBMPfile(int** ImagePtr, WCHAR* InputFilename, IMAGINGHEADER* ImgHeader)
             }
 
             for (int x = 0; x < BMPinfoheader.biWidth; x++) {
-                Image[Offset + x] = ((int)Stride[x * 3 + 0]) | ((int)Stride[x * 3 + 1]<<8) || ((int)Stride[x * 3 + 2]<<16);
+                Image[BlueFrame + Offset + x] = Stride[x * 3 + 0];
+                Image[GreenFrame + Offset + x] = Stride[x * 3 + 1];
+                Image[RedFrame + Offset + x] = Stride[x * 3 + 2];
             }
         }
     }
@@ -1847,12 +1870,13 @@ int  LoadBMPfile(int** ImagePtr, WCHAR* InputFilename, IMAGINGHEADER* ImgHeader)
     delete[] Stride;
     fclose(BMPfile);
 
-    // save image
+    *ImagePtr = Image;
+
     ImgHeader->Endian = (short)-1;  // PC format
     ImgHeader->HeaderSize = (short)sizeof(IMAGINGHEADER);
     ImgHeader->ID = (short)0xaaaa;
     ImgHeader->Version = (short)1;
-    ImgHeader->NumFrames = (short)1;
+    ImgHeader->NumFrames = (short)NumFrames;
     ImgHeader->PixelSize = (short)1;
     ImgHeader->Xsize = BMPinfoheader.biWidth;
     ImgHeader->Ysize = BMPinfoheader.biHeight;
@@ -1863,7 +1887,160 @@ int  LoadBMPfile(int** ImagePtr, WCHAR* InputFilename, IMAGINGHEADER* ImgHeader)
     ImgHeader->Padding[4] = 0;
     ImgHeader->Padding[5] = 0;
 
-    *ImagePtr = Image;
+    return APP_SUCCESS;
+}
+
+//*******************************************************************
+//
+// SaveBits2Text
+// 
+// Save byte stream bits to text file
+// 
+//
+//*******************************************************************
+int SaveBYTEs2Text(WCHAR* OutputFile, BYTE* ByteStream,
+    int NumBytes, int BitOrder)
+{
+    FILE* Out;
+    int CurrentBit = 0;
+    errno_t ErrNum;
+
+    // this is a text file
+    ErrNum = _wfopen_s(&Out, OutputFile, L"w");
+    if (Out == NULL) {
+        return APPERR_FILEOPEN;
+    }
+
+    for(int i=0; i<NumBytes; i++) {
+        BYTE CurrentByte;
+        int BitValue;
+        int CurrentByteBit = 0;
+
+        CurrentByte = ByteStream[i];
+        // process input file bit by bit
+        // while extracting use selected bit order in byte, LSB to MSB or MSB to LSB
+        // variable Endian is really referring to bit order in byte not byte order in multiple byte sequence
+        while (CurrentByteBit < 8) {
+            // process data bit by bit in the order of the bit transmission message
+            // input file is byte oriented MSB to LSB representing the bit order that the message was received
+            // This does not imply any bit ordering in the message itself.
+            if (BitOrder == 0) {
+                BitValue = CurrentByte & (0x80 >> CurrentByteBit);
+            }
+            else {
+                BitValue = CurrentByte & (0x01 << CurrentByteBit);
+            }
+            if (!BitValue) {
+                fprintf(Out, " 0");
+            }
+            else {
+                fprintf(Out, " 1");
+            }
+            CurrentByteBit++;
+        }
+        fprintf(Out, "\n");
+    }
+
+    fclose(Out);
+
+    return APP_SUCCESS;
+}
+
+//*******************************************************************
+//
+// ReadBits2Text
+// 
+// Save byte stream bits to text file
+// 
+//*******************************************************************
+int ReadBYTEs2Text(WCHAR* InputFile, BYTE* ByteStream,
+    int NumBytes, int BitOrder)
+{
+    FILE* In;
+    int CurrentByte = 0;
+    errno_t ErrNum;
+
+    // this is a text file
+    ErrNum = _wfopen_s(&In, InputFile, L"r");
+    if (In == NULL) {
+        return APPERR_FILEOPEN;
+    }
+
+    for (int i = 0; i < NumBytes; i++) {
+        int iRes;
+        int BitValue;
+
+        for (int CurrentBit = 0; CurrentBit < 8; CurrentBit++) {
+            iRes = fscanf_s(In, "%d", &BitValue);
+            if (iRes != 1) {
+                fclose(In);
+                return APPERR_FILEREAD;
+            }
+            if (BitValue < 0) {
+                fclose(In);
+                return APPERR_FILEREAD;
+            }
+            if (BitValue != 0) {
+                if (BitOrder == 0) {
+                    CurrentByte = CurrentByte | (0x80 >> CurrentBit);
+                }
+                else {
+                    CurrentByte = CurrentByte | (0x01 << CurrentBit);
+                }
+            }
+        }
+        ByteStream[i] = CurrentByte;
+        CurrentByte = 0;
+    }
+
+    fclose(In);
+
+    return APP_SUCCESS;
+}
+
+//*******************************************************************
+//
+// SaveASISbitstream
+// 
+// Save byte stream bits to text file
+// 
+//*******************************************************************
+int SaveASISbitstream(WCHAR* Filename, BYTE* Header, BYTE* MessageBody, BYTE* Footer)
+{
+    FILE* Out;
+
+    errno_t ErrNum;
+    size_t Length;
+
+    if (Header == nullptr || MessageBody == nullptr || Footer == nullptr) {
+        return APPERR_PARAMETER;
+    }
+
+    // this is a binary file
+    ErrNum = _wfopen_s(&Out, Filename, L"wb");
+    if (Out == NULL) {
+        return APPERR_FILEOPEN;
+    }
+
+    Length = fwrite(Header, 1, 10, Out);
+    if (Length != 10) {
+        fclose(Out);
+        return APPERR_FILEWRITE;
+    }
+
+    Length = fwrite(MessageBody, 1, 8192, Out);
+    if (Length != 8192) {
+        fclose(Out);
+        return APPERR_FILEWRITE;
+    }
+
+    Length = fwrite(Footer, 1, 10, Out);
+    if (Length != 10) {
+        fclose(Out);
+        return APPERR_FILEWRITE;
+    }
+
+    fclose(Out);
 
     return APP_SUCCESS;
 }

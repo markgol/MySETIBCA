@@ -27,10 +27,22 @@
 //     -4 incorect file type
 //     -5 file sizes mismatch
 //     -6 not yet implemented
+//     -7 File write error
 //
 // Some function return TRUE/FALSE results
 //
 // V1.0.0	2024-06-21	Initial release
+// V1.1.0   2024-06-28  Added ASIS receive/send message
+//                          Recieve reads the ASIS .bin bitstream file and saves a decoded
+//                          .raw image file and a .bmp file
+//                          Send will encode a .raw image file or .bmp file that is 256x256
+//                          and save it as a ASIS bitstream file.
+//                          functions added to support this:
+//                              ReadASISmessage()
+//                              BitSequences()
+//                              ConvertImage2Bitstream()
+//                              CollapseImageFrames() (moved here from CADialogs.cpp)
+//                              BinarizeImage()
 //
 //  This contains the Margolus block cellular functions
 //  This will get converted to a c++ class
@@ -346,6 +358,404 @@ int ReadRulesFile(HWND hDlg, WCHAR* InputFile, int* Rules)
 
     return APP_SUCCESS;
 }
+
+//******************************************************************************
+//
+//  
+// 
+//******************************************************************************
+int ReadASISmessage(WCHAR *Filename, IMAGINGHEADER* ImageHeader, int** NewImage,
+    BYTE* Header, BYTE* Footer, int* BCAiterations, int* BitCount)
+{
+    FILE* In;
+    size_t iRead;
+
+    //
+    // open Filename
+    _wfopen_s(&In, Filename, L"rb");
+    if (In == NULL) {
+        *NewImage = NULL;
+        return APPERR_FILEOPEN;
+    }
+
+    // read first 10 bytes into Header
+    // verify header format
+    iRead = fread(Header, 1, 10, In);
+    if (iRead != 10) {
+        *NewImage = NULL;
+        fclose(In);
+        return APPERR_FILEREAD;
+    }
+    if (Header[0] != 0xff || Header[1] != 0xff) {
+        // This is not an ASIS message
+        *NewImage = NULL;
+        fclose(In);
+        return APPERR_PARAMETER;
+    }
+    if (Header[2] != 0x06 || Header[3] != 0x90) {
+        // This may be unknown ASIS message type
+        *NewImage = NULL;
+        fclose(In);
+        return APPERR_PARAMETER;
+    }
+
+    if (Header[6] != 0x44 || Header[7] != 0x88) {
+        // This may be unknown ASIS message type
+        *NewImage = NULL;
+        fclose(In);
+        return APPERR_PARAMETER;
+    }
+    if (Header[8] != 0x44 || Header[9] != 0x88) {
+        // This may be unknown ASIS message type
+        *NewImage = NULL;
+        fclose(In);
+        return APPERR_PARAMETER;
+    }
+
+    // Allocate 8192 byte array
+    BYTE* MessageBody;
+    MessageBody = new BYTE[(size_t)8192];  // alocate array of byte to receive image
+    if (MessageBody == nullptr) {
+        *NewImage = NULL;
+        fclose(In);
+        return APPERR_MEMALLOC;
+    }
+    // read 8192 bytes from file
+    iRead = fread(MessageBody, 1, 8192, In);
+    if (iRead != 8192) {
+        // not ASIS message
+        delete[] MessageBody;
+        *NewImage = NULL;
+        fclose(In);
+        return APPERR_FILEREAD;
+    }
+
+    // read last 10 bytes into footer
+    iRead = fread(Footer, 1, 10, In);
+    if (iRead != 10) {
+        // not ASIS message
+        delete[] MessageBody;
+        *NewImage = NULL;
+        fclose(In);
+        return APPERR_FILEREAD;
+    }
+    BYTE Tmp;
+    iRead = fread(&Tmp, 1, 1, In);
+    if (iRead == 1) {
+        // not ASIS message
+        delete[] MessageBody;
+        *NewImage = NULL;
+        fclose(In);
+        return APPERR_PARAMETER;
+    }
+    fclose(In);
+    
+    // count the bit sequences in footer (both 1s and 0s)
+    int BitCountList[40];
+    int NumSequences;
+    NumSequences = BitSequences(Footer, BitCountList, 10, FALSE);
+    if (NumSequences == 0) {
+        delete[] MessageBody;
+        *NewImage = NULL;
+        return APPERR_PARAMETER;
+    }
+    // mulitply the length all sequences but the last
+    // use this as the BCAiterations required
+    *BCAiterations = 1;
+    for (int i = 0; i < (NumSequences - 1); i++) {
+        *BCAiterations *= BitCountList[i];
+    }
+
+    // Allocae the new image array
+    int* Image;
+    Image = new int[(size_t)65536];
+    if (Image == nullptr) {
+        delete[] MessageBody;
+        *NewImage = NULL;
+        return APPERR_MEMALLOC;
+    }
+
+    // convert 8192 message into 65536 entries the NewImage
+    int Count=0;
+    for (int i = 0,k=0; i < 8192; i++) {
+        for (int j = 0; j < 8; j++) {
+            if ((MessageBody[i] & ((BYTE)0x80 >> j)) == 0) {
+                Image[k] = 0;
+            }
+            else {
+                Count++;
+                Image[k] = 255;
+            }
+            k++;
+        }
+    }
+    delete[] MessageBody;
+
+    // buld ImageHeader
+    ImageHeader->Endian = (short)-1;  // PC format
+    ImageHeader->HeaderSize = (short)sizeof(IMAGINGHEADER);
+    ImageHeader->ID = (short)0xaaaa;
+    ImageHeader->Version = (short)1;
+    ImageHeader->NumFrames = (short)1;
+    ImageHeader->PixelSize = 1;
+    ImageHeader->Xsize = 256;
+    ImageHeader->Ysize = 256;
+    ImageHeader->Padding[0] = 0;
+    ImageHeader->Padding[1] = 0;
+    ImageHeader->Padding[2] = 0;
+    ImageHeader->Padding[3] = 0;
+    ImageHeader->Padding[4] = 0;
+    ImageHeader->Padding[5] = 0;
+
+    *BitCount = Count;
+    *NewImage = Image;
+    return APP_SUCCESS;
+}
+
+//*******************************************************************
+//
+//  BitSequences
+// 
+// Generates a table of each bit value
+// of 1 sequence and the # of 1 bits in the sequence
+// 
+// Parameters:
+// HWND hDlg            Handle of calling window/dialog
+// WCHAR* InputFile     Packed binary bitstream file
+// WCHAR* OutputFile    CSV text output file
+// int SkipSize         # of bits to skip before starting (typically the prologue)
+//
+//*******************************************************************
+int BitSequences(BYTE *ByteList, int* BitCountList, int MaxBytes, BOOL BitOrder)
+{
+    int CurrentBit = 0;
+    int CurrentPrologueBit = 0;
+    int CurrentByteBit = 0;
+    int NumOnes = 0;
+    int NumZeros = 0;
+    int LastBit = 0;
+    int BitCounter = 0;
+    int OneLength = 0;
+    int ZeroLength = 0;
+    int NumSequences = 0;
+    int CurrentState = 0; // 0 - this is first bit in file, 1 - counting 1 sequence, 2 counting 0 sequence
+
+    for(int i=0; i< MaxBytes; i++) {
+        char CurrentByte;
+        int BitValue;
+
+        CurrentByteBit = 0;
+
+        CurrentByte = ByteList[i];
+
+        // process data bit by bit in the order of the bit transmission message
+        // input file is byte oriented MSB to LSB representing the bit order that the message was received
+        // This does not imply any bit ordering in the message itself.
+
+        while (CurrentByteBit < 8) {
+            // current bit
+            if (BitOrder == 0) {
+                BitValue = CurrentByte & (0x80 >> CurrentByteBit);
+            }
+            else {
+                BitValue = CurrentByte & (0x01 << CurrentByteBit);
+            }
+            // process this bit
+            // possible states:
+            //      first bit
+            //      counting zeros
+            //      counting ones
+            // 
+            switch (CurrentState) {
+            case 0:
+            {
+                if (BitValue) {
+                    CurrentState = 1;
+                    NumOnes = 1;
+                    OneLength = 1;
+                }
+                else {
+                    CurrentState = 2;
+                    NumZeros = 1;
+                    ZeroLength = 1;
+                }
+                break;
+            }
+
+            case 1:
+            {
+                if (BitValue) {
+                    // another 1
+                    NumOnes++;
+                    OneLength++;
+                    break;
+                }
+
+                // this is a 0, so change states
+                // save result of 1 sequence
+                BitCountList[NumSequences] = OneLength;
+                NumSequences++;
+                ZeroLength = 1;
+                NumZeros++;
+                CurrentState = 2;
+                break;
+            }
+
+            case 2:
+            {
+                if (BitValue == 0) {
+                    // another 0
+                    NumZeros++;
+                    ZeroLength++;
+                    break;
+                }
+
+                // this is a 1, so change states
+                // save result of 0 sequence
+                BitCountList[NumSequences] = ZeroLength;
+                NumSequences++;
+                OneLength = 1;
+                NumOnes++;
+                CurrentState = 1;
+                break;
+            }
+
+            default:
+                // should never get here
+                break;
+            };
+
+            CurrentByteBit++;
+            CurrentBit++;
+        }
+    }
+
+    // save last state results
+    if (CurrentState == 1) {
+        BitCountList[NumSequences] = OneLength;
+        NumSequences++;
+    }
+    else if (CurrentState == 2) {
+        BitCountList[NumSequences] = ZeroLength;
+        NumSequences++;
+    }
+
+    return NumSequences;
+}
+
+//*******************************************************************
+//
+//  ConvertImage2Bitstream
+//
+//*******************************************************************
+int ConvertImage2Bitstream(int* InputImage, IMAGINGHEADER* ImageHeader,
+    BYTE **MessageBody, int MessageLength, BOOL BitOrder, int* BitCount)
+{
+    if ((ImageHeader->Xsize * ImageHeader->Ysize / 8) != MessageLength) {
+        *MessageBody = nullptr;
+        return APPERR_PARAMETER;
+    }
+
+    BYTE* Message;
+    Message = new BYTE[MessageLength];
+    if (Message == nullptr) {
+        *MessageBody = nullptr;
+        return APPERR_MEMALLOC;
+    }
+
+    // convert
+    BYTE CurrentByte;
+    int ImageIndex = 0;
+    int Count = 0;
+
+    for (int i = 0; i < MessageLength; i++) {
+        CurrentByte = 0;
+        for (int j = 0; j < 8; j++) {
+            if (InputImage[ImageIndex] != 0) {
+                if (BitOrder == 0) {
+                    Count++;
+                    CurrentByte = CurrentByte | (0x80 >> j);
+                }
+                else {
+                    Count++;
+                    CurrentByte = CurrentByte | (0x01 << j);
+                }
+            }
+            ImageIndex++;
+        }
+        Message[i] = CurrentByte;
+    }
+
+    *MessageBody = Message;
+    *BitCount = Count;
+    return APP_SUCCESS;
+}
+
+//*******************************************************************************
+//
+// CollapseImageFrames
+// 
+// This is to convert color image from 3 frame raw file to single frame binary 0/255
+// Sum all 3 frames into the first frame.
+// Use Threshold to binarize
+// 
+// int* TheImage
+// IMAGINGHEADER* BCAimageHeader
+// 
+// no return parameter
+// 
+//*******************************************************************************
+void CollapseImageFrames(int* Image, IMAGINGHEADER* ImageHeader, int Threshold) {
+    int FrameOffset;
+    int x, y;
+    int Offset;
+
+    FrameOffset = ImageHeader->Xsize * ImageHeader->Ysize;
+
+    for (y = 0, Offset = 0; y < ImageHeader->Ysize; y++) {
+        for (x = 0; x < ImageHeader->Xsize; x++) {
+            Image[Offset + x] = Image[Offset + x] + Image[FrameOffset + Offset + x] +
+                Image[2 * FrameOffset + Offset + x];
+            if (Image[Offset + x] < Threshold) {
+                Image[Offset + x] = 0;
+            }
+            else {
+                Image[Offset + x] = 255;
+            }
+        }
+        Offset += ImageHeader->Xsize;
+    }
+
+    ImageHeader->NumFrames = 1;
+    return;
+}
+
+//*******************************************************************************
+//
+// BinarizeImage
+// 
+// This is to binarize image from single frame
+// Use Threshold to binarize
+// 
+// int* TheImage
+// IMAGINGHEADER* BCAimageHeader
+// 
+// no return parameter
+// 
+//*******************************************************************************
+void BinarizeImage(int* TheImage, IMAGINGHEADER* BCAimageHeader, int Threshold)
+{
+    for (int i = 0; i < (BCAimageHeader->Xsize * BCAimageHeader->Ysize*BCAimageHeader->NumFrames); i++) {
+        if (TheImage[i] < Threshold) {
+            TheImage[i] = 0;
+        }
+        else {
+            TheImage[i] = 255;
+        }
+    }
+    return;
+}
+
 
 // kikuchiyo (Discord username)
 // used zlib and the compression size as a entropy measure

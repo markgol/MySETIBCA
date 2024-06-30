@@ -23,6 +23,19 @@
 // V1.0.0	2024-06-21	Initial release
 // V1.0.1   2024-06-23  Changed BCA layer raw file input of color based raw image(3 frames)
 //                        to single single binary frame
+// V1.1.0   2024-06-28  Added ASIS receive/send message dialogs
+//                          Recieve reads the ASIS .bin bitstream file and saves a decoded
+//                          .raw image file and a .bmp file
+//                          Send will encode a .raw image file or .bmp file that is 256x256
+//                          and save it as a ASIS bitstream file.  (pixels that have a 
+//                          monochromatic or chromatic brightness <50 are considered 0,
+//                          >= 50 are considered 1)
+//                      Added even/odd controls to Margolus BCA, this shows wether the next
+//                          iteration will be an even (0,0) or odd grid (1,1).  Also allows
+//                          user to change the current selelction.  Note:  ASIS uses an even
+//                          starting grid.
+//                      Allow also the use of .bmp file instead of .raw file
+//                      Automatically save of BMP and (optionally) PNG file when image file is saved
 // 
 // Cellular Automata tools dialog box handlers
 // 
@@ -52,9 +65,6 @@
 #include "FileFunctions.h"
 #include "shellapi.h"
 
-#define BINARY_THRESHOLD 20
-void CollapseImageFrames(int* TheImage, IMAGINGHEADER* BCAimageHeader);
-
 // Add new callback prototype declarations in my MySETIBCA.cpp
 
 //*******************************************************************************
@@ -75,15 +85,27 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
         GetPrivateProfileString(L"MargolusBCADlg", L"ImageInput", L"Message.raw", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
         SetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString);
-        if (ReadImageHeader(szString, &ImageHeader) == 1) {
+        // check if .raw image file format first
+        if (ReadImageHeader(szString, &ImageHeader) == APP_SUCCESS) {
             SetDlgItemInt(hDlg, IDC_XSIZEI, ImageHeader.Xsize, TRUE);
             SetDlgItemInt(hDlg, IDC_YSIZEI, ImageHeader.Ysize, TRUE);
             SetDlgItemInt(hDlg, IDC_NUM_FRAMES, ImageHeader.NumFrames, TRUE);
         }
         else {
-            SetDlgItemInt(hDlg, IDC_XSIZEI, 0, TRUE);
-            SetDlgItemInt(hDlg, IDC_YSIZEI, 0, TRUE);
-            SetDlgItemInt(hDlg, IDC_NUM_FRAMES, 0, TRUE);
+            // then try .bmp file format
+            int* InputImage;
+            if (ReadBMPfile(&InputImage, szString, &ImageHeader) == APP_SUCCESS) {
+                SetDlgItemInt(hDlg, IDC_XSIZEI, ImageHeader.Xsize, TRUE);
+                SetDlgItemInt(hDlg, IDC_YSIZEI, ImageHeader.Ysize, TRUE);
+                SetDlgItemInt(hDlg, IDC_NUM_FRAMES, ImageHeader.NumFrames, TRUE);
+                delete[] InputImage;
+            }
+            else {
+                // unrecognized file format
+                SetDlgItemInt(hDlg, IDC_XSIZEI, 0, TRUE);
+                SetDlgItemInt(hDlg, IDC_YSIZEI, 0, TRUE);
+                SetDlgItemInt(hDlg, IDC_NUM_FRAMES, 0, TRUE);
+            }
         }
 
         GetPrivateProfileString(L"MargolusBCADlg", L"TextInput1", L"C:\\MySETIBCA\\Data\\Rules\\single point cw.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
@@ -110,8 +132,24 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         GetPrivateProfileString(L"MargolusBCADlg", L"FPSrun", L"100", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
         SetDlgItemText(hDlg, IDC_FPS_RUN, szString);
 
+        GetPrivateProfileString(L"MargolusBCADlg", L"Threshold", L"2", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_THRESHOLD, szString);
+
+        int iRes = GetPrivateProfileInt(L"MargolusBCADlg", L"AutoBMP", 1, (LPCTSTR)strAppNameINI);
+        if (iRes != 0) {
+            CheckDlgButton(hDlg, IDC_BMP_FILE, BST_CHECKED);
+        }
+
         SetDlgItemText(hDlg, IDC_CURRENT_ITERATION, L"0");
         
+        EvenStep = TRUE;
+        if (EvenStep) {
+            CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_EVEN);
+        }
+        else {
+            CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_ODD);
+        }
+
         CurrentIteration = 0;
         BCAimageLoaded = FALSE;
 
@@ -146,10 +184,11 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             GetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString, MAX_PATH);
             COMDLG_FILTERSPEC rawType[] =
             {
-                 { L"text files", L"*.raw" },
+                 { L"raw image files", L"*.raw" },
+                 { L"Bitmap files", L"*.bmp"},
                  { L"All Files", L"*.*" },
             };
-            if (!CCFileOpen(hDlg, szString, &pszFilename, FALSE, 2, rawType, L"*.raw")) {
+            if (!CCFileOpen(hDlg, szString, &pszFilename, FALSE, 3, rawType, L"*.raw")) {
                 return (INT_PTR)TRUE;
             }
             {
@@ -158,17 +197,27 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             }
             SetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString);
 
-            if (ReadImageHeader(szString, &ImageHeader) == 1) {
+            // check if .raw image file format first
+            if (ReadImageHeader(szString, &ImageHeader) == APP_SUCCESS) {
                 SetDlgItemInt(hDlg, IDC_XSIZEI, ImageHeader.Xsize, TRUE);
                 SetDlgItemInt(hDlg, IDC_YSIZEI, ImageHeader.Ysize, TRUE);
                 SetDlgItemInt(hDlg, IDC_NUM_FRAMES, ImageHeader.NumFrames, TRUE);
-                // ??? warning about multiframe files, only the first frame in file is used
             }
             else {
-                SetDlgItemInt(hDlg, IDC_XSIZEI, 0, TRUE);
-                SetDlgItemInt(hDlg, IDC_YSIZEI, 0, TRUE);
-                SetDlgItemInt(hDlg, IDC_NUM_FRAMES, 0, TRUE);
-                MessageBox(hDlg, L"Selected file is not an image file", L"File incompatible", MB_OK);
+                // then try .bmp file format
+                int* InputImage;
+                if (ReadBMPfile(&InputImage, szString, &ImageHeader) == APP_SUCCESS) {
+                    SetDlgItemInt(hDlg, IDC_XSIZEI, ImageHeader.Xsize, TRUE);
+                    SetDlgItemInt(hDlg, IDC_YSIZEI, ImageHeader.Ysize, TRUE);
+                    SetDlgItemInt(hDlg, IDC_NUM_FRAMES, ImageHeader.NumFrames, TRUE);
+                    delete[] InputImage;
+                }
+                else {
+                    // unrecognized file format
+                    SetDlgItemInt(hDlg, IDC_XSIZEI, 0, TRUE);
+                    SetDlgItemInt(hDlg, IDC_YSIZEI, 0, TRUE);
+                    SetDlgItemInt(hDlg, IDC_NUM_FRAMES, 0, TRUE);
+                }
             }
 
             return (INT_PTR)TRUE;
@@ -234,6 +283,21 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             return (INT_PTR)TRUE;
         }
 
+        case IDC_EVEN:
+        {
+            if (IsDlgButtonChecked(hDlg, IDC_EVEN)) {
+                EvenStep = TRUE;
+            }
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_ODD:
+        {
+             if (IsDlgButtonChecked(hDlg, IDC_ODD)) {
+                EvenStep = FALSE;
+            }
+            return (INT_PTR)TRUE;
+        }
         case IDC_STEP_BACKWARD:
         {
             BOOL bSuccess;
@@ -279,6 +343,12 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
             // update current iteration
             SetDlgItemInt(hDlg, IDC_CURRENT_ITERATION, CurrentIteration, TRUE);
+            if (EvenStep) {
+                CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_EVEN);
+            }
+            else {
+                CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_ODD);
+            }
 
             // update displays
             SendMessage(hwndLayers, WM_COMMAND, ID_UPDATE, 1); // apply 
@@ -333,6 +403,13 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             // update current iteration
             SetDlgItemInt(hDlg, IDC_CURRENT_ITERATION, CurrentIteration, TRUE);
             
+            if (EvenStep) {
+                CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_EVEN);
+            }
+            else {
+                CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_ODD);
+            }
+
             // update displays
             SendMessage(hwndLayers, WM_COMMAND, ID_UPDATE, 1); // apply 
 
@@ -527,13 +604,28 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
             CurrentIteration = 0;
             EvenStep = TRUE;
+            CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_EVEN);
+
             GetDlgItemText(hDlg, IDC_IMAGE_INPUT, InputFile, MAX_PATH);
 
             // read image file into memory
+            int UseThisThreshold;
+            BOOL bSuccess;
+
+            UseThisThreshold = GetDlgItemInt(hDlg, IDC_THRESHOLD, &bSuccess, TRUE);
+            if (!bSuccess || UseThisThreshold <= 0) {
+                MessageBox(hDlg, L"Invalid threshold or <= 0", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
             iRes = LoadImageFile(&TheImage, InputFile, &BCAimageHeader);
             if (iRes != APP_SUCCESS) {
-                MessageBox(hDlg, L"Could not load input image, check format", L"File I/O error", MB_OK);
-                return (INT_PTR)TRUE;
+                // then try .bmp format
+                iRes = ReadBMPfile(&TheImage, InputFile, &BCAimageHeader);
+                if (iRes != APP_SUCCESS) {
+                    MessageBox(hDlg, L"Input image file is not valid", L"File read error", MB_OK);
+                    return (INT_PTR)TRUE;
+                }
             }
 
             // the image must be even in xsize and ysize
@@ -543,11 +635,14 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 MessageBox(hDlg, L"Image not loaded, x,y sizes must be even", L"File size error", MB_OK);
                 return (INT_PTR)TRUE;
             }
+
             // check if this is 3 frame image (3 frame raw files are used as color images)
             // If it is convert the 3 frames into the first frame as a binary 0 or 255
-            // handling of color images is possible in future update
             if (BCAimageHeader.NumFrames == 3) {
-                CollapseImageFrames(TheImage, &BCAimageHeader);
+                CollapseImageFrames(TheImage, &BCAimageHeader, UseThisThreshold);
+            }
+            else {
+                BinarizeImage(TheImage, &BCAimageHeader, UseThisThreshold);
             }
 
             // update Layer 0 in display dialog
@@ -617,6 +712,20 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
                 int iRes;
                 iRes = SaveImageFile(hDlg, TheImage, NewFilename, &BCAimageHeader);
+                if (iRes==APP_SUCCESS && IsDlgButtonChecked(hDlg, IDC_BMP_FILE) == BST_CHECKED) {
+                    // reassemble filename
+                    WCHAR BMPFilename[MAX_PATH];
+                    err = _wmakepath_s(BMPFilename, _MAX_PATH, Drive, Dir, NewFname, L".bmp");
+                    if (err == 0) {
+                        iRes = SaveBMP(BMPFilename, NewFilename, FALSE, TRUE);
+                        if (iRes == APP_SUCCESS) {
+                            iRes = GetPrivateProfileInt(L"SettingsGlobalDlg", L"AutoPNG", 1, (LPCTSTR)strAppNameINI);
+                            if (iRes != 0) {
+                                SaveBMP2PNG(BMPFilename);
+                            }
+                        }
+                    }
+                }
             }
             return (INT_PTR)TRUE;
         }
@@ -646,6 +755,14 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
             KillTimer(hwndMain, IDT_BCA_RUN_TIMER);
             BCArunning = 0;
+
+            if (EvenStep) {
+                CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_EVEN);
+            }
+            else {
+                CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_ODD);
+            }
+
             return (INT_PTR)TRUE;
         }
 
@@ -678,6 +795,16 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             GetDlgItemText(hDlg, IDC_FPS_RUN, szString, MAX_PATH);
             WritePrivateProfileString(L"MargolusBCADlg", L"FPSrun", szString, (LPCTSTR)strAppNameINI);
 
+            GetDlgItemText(hDlg, IDC_THRESHOLD, szString, MAX_PATH);
+            WritePrivateProfileString(L"MargolusBCADlg", L"Threshold", szString, (LPCTSTR)strAppNameINI);
+
+            if (IsDlgButtonChecked(hDlg, IDC_BMP_FILE) == BST_CHECKED) {
+                WritePrivateProfileString(L"MargolusBCADlg", L"AutoBMP", L"1", (LPCTSTR)strAppNameINI);
+            }
+            else {
+                WritePrivateProfileString(L"MargolusBCADlg", L"AutoBMP", L"0", (LPCTSTR)strAppNameINI);
+            }
+
             {
                 // save window position/size data
                 CString csString = L"MargolusBCAwindow";
@@ -700,38 +827,617 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
 //*******************************************************************************
 //
-// CollapseImageFrames
-// 
-// This is to convert color image from 3 frame raw file to single frame binary 0/255
-// Sum all 3 frames into the first frame.
-// Use Threshold to binarize
-// 
-// int* TheImage
-// IMAGINGHEADER* BCAimageHeader
-// 
-// no return parameter
+// Message handler for ReceiveASISdlg dialog box.
 // 
 //*******************************************************************************
-void CollapseImageFrames(int* TheImage, IMAGINGHEADER* BCAimageHeader) {
-    int FrameOffset;
-    int x, y;
-    int Offset;
+INT_PTR CALLBACK ReceiveASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+        WCHAR szString[MAX_PATH];
 
-    FrameOffset = BCAimageHeader->Xsize * BCAimageHeader->Ysize;
+    case WM_INITDIALOG:
+    {
+        IMAGINGHEADER ImageHeader;
+        int BCAiterations = 0;
+        int* InputImage;
+        BYTE Header[10];
+        BYTE Footer[10];
 
-    for (y = 0, Offset = 0; y < BCAimageHeader->Ysize; y++) {
-        for (x = 0; x < BCAimageHeader->Xsize; x++) {
-            TheImage[Offset + x] = TheImage[Offset + x] + TheImage[FrameOffset + Offset + x] +
-                TheImage[2 * FrameOffset + Offset + x];
-            if (TheImage[Offset + x] < BINARY_THRESHOLD) {
-                TheImage[Offset + x] = 0;
+        GetPrivateProfileString(L"ReceiveASISdlg", L"ImageInput",
+            L"C:\\MySETIBCA\\Data\\Data17.bin", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString);
+        // Read header, body, footer
+        int iRes;
+        int BitCount;
+        int Iterations;
+        iRes = ReadASISmessage(szString, &ImageHeader, &InputImage, Header, Footer, &Iterations, &BitCount);
+        if (iRes == APP_SUCCESS) {
+            //IDC_NUM_BCA_STEPS
+            SetDlgItemInt(hDlg, IDC_NUM_BCA_STEPS, Iterations, TRUE);
+            SetDlgItemInt(hDlg, IDC_NUM_BITS, BitCount, TRUE);
+            delete[] InputImage;
+        }
+        else {
+            SetDlgItemInt(hDlg, IDC_NUM_BCA_STEPS, 0, TRUE);
+            SetDlgItemInt(hDlg, IDC_NUM_BITS, 0, TRUE);
+        }
+
+        GetPrivateProfileString(L"ReceiveASISdlg", L"TextOutput1", L"C:\\MySETIBCA\\Data\\Results\\Header.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString);
+
+        GetPrivateProfileString(L"ReceiveASISdlg", L"TextOutput2", L"C:\\MySETIBCA\\Data\\Results\\Footer.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_TEXT_OUTPUT2, szString);
+
+        GetPrivateProfileString(L"ReceiveASISdlg", L"ImageOutput", L"C:\\MySETIBCA\\Data\\Results\\BCAresult.raw", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString);
+
+        iRes = GetPrivateProfileInt(L"ReceiveASISdlg", L"AutoBMP", 1, (LPCTSTR)strAppNameINI);
+        if (iRes != 0) {
+            CheckDlgButton(hDlg, IDC_BMP_FILE, BST_CHECKED);
+        }
+
+        int ResetWindows = GetPrivateProfileInt(L"GlobalSettings", L"ResetWindows", 0, (LPCTSTR)strAppNameINI);
+        if (!ResetWindows) {
+            CString csString = L"ReceiveASISdlg";
+            RestoreWindowPlacement(hDlg, csString);
+        }
+
+        return (INT_PTR)TRUE;
+    }
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+        case IDC_IMAGE_INPUT_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString, MAX_PATH);
+            COMDLG_FILTERSPEC textType[] =
+            {
+                 { L"ASIS binary files", L"*.bin" },
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileOpen(hDlg, szString, &pszFilename, FALSE, 2, textType, L"*.bin")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+            SetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString);
+
+            // Read header, body, footer
+            int iRes;
+            IMAGINGHEADER ImageHeader;
+            int BCAiterations = 0;
+            int* InputImage;
+            BYTE Header[10];
+            BYTE Footer[10];
+            int IterationsNeeded;
+            int BitCount;
+
+            iRes = ReadASISmessage(szString, &ImageHeader, &InputImage, Header, Footer,
+                &IterationsNeeded, &BitCount);
+            if (iRes == APP_SUCCESS) {
+                //IDC_NUM_BCA_STEPS
+                SetDlgItemInt(hDlg, IDC_NUM_BCA_STEPS, IterationsNeeded, TRUE);
+                SetDlgItemInt(hDlg, IDC_NUM_BITS, BitCount, TRUE);
+                delete[] InputImage;
             }
             else {
-                TheImage[Offset + x] = 255;
+                SetDlgItemInt(hDlg, IDC_NUM_BCA_STEPS, 0, TRUE);
+                SetDlgItemInt(hDlg, IDC_NUM_BITS, 0, TRUE);
+            }
+
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_TEXT_OUTPUT1_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString, MAX_PATH);
+            COMDLG_FILTERSPEC textType[] =
+            {
+                 { L"text files", L"*.txt" },
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileSave(hDlg, szString, &pszFilename, FALSE, 2, textType, L"*.txt")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+            SetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString);
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_TEXT_OUTPUT2_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString, MAX_PATH);
+            COMDLG_FILTERSPEC textType[] =
+            {
+                 { L"text files", L"*.txt" },
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileSave(hDlg, szString, &pszFilename, FALSE, 2, textType, L"*.txt")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+            SetDlgItemText(hDlg, IDC_TEXT_OUTPUT2, szString);
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_IMAGE_OUTPUT_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString, MAX_PATH);
+            COMDLG_FILTERSPEC rawType[] =
+            {
+                 { L"text files", L"*.raw" },
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileSave(hDlg, szString, &pszFilename, FALSE, 2, rawType, L"*.raw")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+            SetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString);
+            return (INT_PTR)TRUE;
+        }
+
+        case IDOK:
+        {
+            GetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString, MAX_PATH);
+
+            // Convert and save ASIS message
+            // 
+            // Read ASIS message
+            //             // Read header, body, footer
+            int iRes;
+            IMAGINGHEADER ImageHeader;
+            int BCAiterations = 0;
+            int* InputImage;
+            BYTE Header[10];
+            BYTE Footer[10];
+            int IterationsNeeded;
+            int BitCount;
+
+            // read input file
+            iRes = ReadASISmessage(szString, &ImageHeader, &InputImage, Header, Footer, 
+                &IterationsNeeded, &BitCount);
+            if (iRes != APP_SUCCESS) {
+                MessageBox(hDlg, L"Input file is not an ASIS message", L"Read error", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+            WritePrivateProfileString(L"ReceiveASISdlg", L"ImageInput", szString, (LPCTSTR)strAppNameINI);
+
+            // Save Header in text file
+            GetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString, MAX_PATH);
+            WritePrivateProfileString(L"ReceiveASISdlg", L"TextOutput1", szString, (LPCTSTR)strAppNameINI);
+            iRes = SaveBYTEs2Text(szString, Header, 10, FALSE);
+            if (iRes != APP_SUCCESS) {
+                MessageBox(hDlg, L"failed to write the header text file", L"File open error", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            // Save Footer in text file
+            GetDlgItemText(hDlg, IDC_TEXT_OUTPUT2, szString, MAX_PATH);
+            WritePrivateProfileString(L"ReceiveASISdlg", L"TextOutput2", szString, (LPCTSTR)strAppNameINI);
+            iRes = SaveBYTEs2Text(szString, Footer, 10, FALSE);
+            if (iRes != APP_SUCCESS) {
+                MessageBox(hDlg, L"failed to write the header text file", L"File open error", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            // run BCA to decode
+            // single point CW rules for BCA
+            int Rules[16] = { 0, 2, 8, 3, 1, 5, 6, 7, 4, 9,10,11,12,13,14,15};
+            BOOL EvenStep = TRUE;
+            
+            for (int i = 0; i < IterationsNeeded; i++) {
+                // step forward on iteration
+                MargolusBCAp1p1(EvenStep, InputImage,
+                    ImageHeader.Xsize, ImageHeader.Ysize, Rules);
+                EvenStep = !EvenStep;
+            }
+
+            GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString, MAX_PATH);
+
+            iRes = SaveImageFile(hDlg, InputImage, szString, &ImageHeader);
+            if (iRes != APP_SUCCESS) {
+                MessageBox(hDlg, L"Output image file save failed", L"File write error", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            WritePrivateProfileString(L"ReceiveASISdlg", L"ImageOutput", szString, (LPCTSTR)strAppNameINI);
+            delete[] InputImage;
+
+            if (IsDlgButtonChecked(hDlg, IDC_BMP_FILE) == BST_CHECKED) {
+                WritePrivateProfileString(L"ReceiveASISdlg", L"AutoBMP", L"1", (LPCTSTR)strAppNameINI);
+            }
+            else {
+                WritePrivateProfileString(L"ReceiveASISdlg", L"AutoBMP", L"0", (LPCTSTR)strAppNameINI);
+            }
+
+            if (IsDlgButtonChecked(hDlg, IDC_BMP_FILE) == BST_CHECKED) {
+                WCHAR BMPFilename[MAX_PATH];
+                WCHAR Drive[_MAX_DRIVE];
+                WCHAR Dir[_MAX_DIR];
+                WCHAR Fname[_MAX_FNAME];
+                WCHAR Ext[_MAX_EXT];
+
+                // split apart original filename
+                int err;
+                err = _wsplitpath_s(szString, Drive, _MAX_DRIVE, Dir, _MAX_DIR, Fname,
+                    _MAX_FNAME, Ext, _MAX_EXT);
+                if (err != 0) {
+                    MessageBox(hDlg, L"Could not creat BMP output filename", L"Receive ASIS message", MB_OK);
+                    return (INT_PTR)TRUE;
+                }
+
+                // reassemble filename as .bmp file
+                err = _wmakepath_s(BMPFilename, _MAX_PATH, Drive, Dir, Fname, L".bmp");
+                if (err != 0) {
+                    MessageBox(hDlg, L"Could not creat output filename", L"BCA save image", MB_OK);
+                    return (INT_PTR)TRUE;
+                }
+
+                iRes = SaveBMP(BMPFilename, szString, FALSE, TRUE);
+                if (iRes == APP_SUCCESS) {
+                    iRes = GetPrivateProfileInt(L"SettingsGlobalDlg", L"AutoPNG", 1, (LPCTSTR)strAppNameINI);
+                    if (iRes != 0) {
+                        SaveBMP2PNG(BMPFilename);
+                    }
+                }
+            }
+
+            {
+                // save window position/size data
+                CString csString = L"ReceiveASISdlg";
+                SaveWindowPlacement(hDlg, csString);
+            }
+
+            WCHAR NewMessage[MAX_PATH];
+            swprintf_s(NewMessage, MAX_PATH, L"Decode message complete\n%d iterations\n%d bits set in image",
+                IterationsNeeded, BitCount);
+            MessageBox(hDlg, NewMessage, L"Send ASIS message", MB_OK);
+
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+
+        case IDCANCEL:
+        {
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+
+        }
+    }
+
+    return (INT_PTR)FALSE;
+}
+
+//*******************************************************************************
+//
+// Message handler for SendASISdlg dialog box.
+// 
+//*******************************************************************************
+INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+        WCHAR szString[MAX_PATH];
+
+    case WM_INITDIALOG:
+    {
+        IMAGINGHEADER ImageHeader;
+        int BCAiterations = 0;
+
+        GetPrivateProfileString(L"SendASISdlg", L"ImageInput",
+            L"C:\\MySETIBCA\\Data\\MyMessage.raw", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString);
+        // check if .raw image file format first
+        if (ReadImageHeader(szString, &ImageHeader) == APP_SUCCESS) {
+            SetDlgItemInt(hDlg, IDC_XSIZEI, ImageHeader.Xsize, TRUE);
+            SetDlgItemInt(hDlg, IDC_YSIZEI, ImageHeader.Ysize, TRUE);
+            SetDlgItemInt(hDlg, IDC_NUM_FRAMES, ImageHeader.NumFrames, TRUE);
+        }
+        else {
+            // then try .bmp file format
+            int* InputImage;
+            if (ReadBMPfile(&InputImage, szString, &ImageHeader) == APP_SUCCESS) {
+                SetDlgItemInt(hDlg, IDC_XSIZEI, ImageHeader.Xsize, TRUE);
+                SetDlgItemInt(hDlg, IDC_YSIZEI, ImageHeader.Ysize, TRUE);
+                SetDlgItemInt(hDlg, IDC_NUM_FRAMES, ImageHeader.NumFrames, TRUE);
+                delete[] InputImage;
+            }
+            else {
+                // unrecognized file format
+                SetDlgItemInt(hDlg, IDC_XSIZEI, 0, TRUE);
+                SetDlgItemInt(hDlg, IDC_YSIZEI, 0, TRUE);
+                SetDlgItemInt(hDlg, IDC_NUM_FRAMES, 0, TRUE);
             }
         }
-        Offset += BCAimageHeader->Xsize;
+
+        GetPrivateProfileString(L"SendASISdlg", L"BCAiterations",
+            L"6625", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_NUM_BCA_STEPS, szString);
+
+        GetPrivateProfileString(L"SendASISdlg", L"TextInput1", L"C:\\MySETIBCA\\Data\\Results\\Header.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_TEXT_INPUT1, szString);
+
+        GetPrivateProfileString(L"SendASISdlg", L"TextInput2", L"C:\\MySETIBCA\\Data\\Results\\Footer.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_TEXT_INPUT2, szString);
+
+        GetPrivateProfileString(L"SendASISdlg", L"MessageOutput", L"C:\\MySETIBCA\\Data\\Results\\MyMessage.bin", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString);
+
+        GetPrivateProfileString(L"SendASISdlg", L"Threshold", L"2", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_THRESHOLD, szString);
+
+        int ResetWindows = GetPrivateProfileInt(L"GlobalSettings", L"ResetWindows", 0, (LPCTSTR)strAppNameINI);
+        if (!ResetWindows) {
+            CString csString = L"SendASISdlg";
+            RestoreWindowPlacement(hDlg, csString);
+        }
+
+        return (INT_PTR)TRUE;
     }
-    
-    return;
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+        case IDC_IMAGE_INPUT_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString, MAX_PATH);
+            COMDLG_FILTERSPEC textType[] =
+            {
+                 { L"Image files", L"*.raw" },
+                { L"Bitmap file", L"*.bmp"},
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileOpen(hDlg, szString, &pszFilename, FALSE, 3, textType, L"*.raw")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+            SetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString);
+            
+            IMAGINGHEADER ImageHeader;
+            // check if .raw image file format first
+            if (ReadImageHeader(szString, &ImageHeader) == APP_SUCCESS) {
+                SetDlgItemInt(hDlg, IDC_XSIZEI, ImageHeader.Xsize, TRUE);
+                SetDlgItemInt(hDlg, IDC_YSIZEI, ImageHeader.Ysize, TRUE);
+                SetDlgItemInt(hDlg, IDC_NUM_FRAMES, ImageHeader.NumFrames, TRUE);
+            }
+            else {
+                // then try .bmp file format
+                int* InputImage;
+                if (ReadBMPfile(&InputImage, szString, &ImageHeader) == APP_SUCCESS) {
+                    SetDlgItemInt(hDlg, IDC_XSIZEI, ImageHeader.Xsize, TRUE);
+                    SetDlgItemInt(hDlg, IDC_YSIZEI, ImageHeader.Ysize, TRUE);
+                    SetDlgItemInt(hDlg, IDC_NUM_FRAMES, ImageHeader.NumFrames, TRUE);
+                    delete[] InputImage;
+                }
+                else {
+                    // unrecognized file format
+                    SetDlgItemInt(hDlg, IDC_XSIZEI, 0, TRUE);
+                    SetDlgItemInt(hDlg, IDC_YSIZEI, 0, TRUE);
+                    SetDlgItemInt(hDlg, IDC_NUM_FRAMES, 0, TRUE);
+                }
+            }
+
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_TEXT_INPUT1_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_TEXT_INPUT1, szString, MAX_PATH);
+            COMDLG_FILTERSPEC textType[] =
+            {
+                 { L"text files", L"*.txt" },
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileOpen(hDlg, szString, &pszFilename, FALSE, 2, textType, L"*.txt")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+            SetDlgItemText(hDlg, IDC_TEXT_INPUT1, szString);
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_TEXT_INPUT2_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_TEXT_INPUT1, szString, MAX_PATH);
+            COMDLG_FILTERSPEC textType[] =
+            {
+                 { L"text files", L"*.txt" },
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileOpen(hDlg, szString, &pszFilename, FALSE, 2, textType, L"*.txt")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+            SetDlgItemText(hDlg, IDC_TEXT_INPUT2, szString);
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_IMAGE_OUTPUT_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString, MAX_PATH);
+            COMDLG_FILTERSPEC rawType[] =
+            {
+                 { L"text files", L"*.raw" },
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileSave(hDlg, szString, &pszFilename, FALSE, 2, rawType, L"*.raw")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+
+            SetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString);
+            return (INT_PTR)TRUE;
+        }
+
+        case IDOK:
+        {
+            BOOL bSuccess;
+            int NumSteps;
+            NumSteps = GetDlgItemInt(hDlg, IDC_NUM_BCA_STEPS, &bSuccess, TRUE);
+            if (!bSuccess) {
+                MessageBox(hDlg, L"Invalid # iterations", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+            if (NumSteps < 0) {
+                MessageBox(hDlg, L"# iterations must be positive", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            int UseThisThreshold;
+
+            UseThisThreshold = GetDlgItemInt(hDlg, IDC_THRESHOLD, &bSuccess, TRUE);
+            if (!bSuccess || UseThisThreshold <= 0) {
+                MessageBox(hDlg, L"Invalid threshold or <= 0", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+            GetDlgItemText(hDlg, IDC_THRESHOLD, szString, MAX_PATH);
+
+            WritePrivateProfileString(L"SendASISdlg", L"Threshold", szString, (LPCTSTR)strAppNameINI);
+            GetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString, MAX_PATH);
+            WritePrivateProfileString(L"SendASISdlg", L"ImageInput", szString, (LPCTSTR)strAppNameINI);
+            
+            // read the image file
+            int iRes;
+            BYTE Header[10];
+            BYTE Footer[10];
+            int* InputImage = nullptr;
+            IMAGINGHEADER ImageHeader;
+
+            // Try .raw file format first
+
+            iRes = LoadImageFile(&InputImage, szString, &ImageHeader);
+            if (iRes != APP_SUCCESS) {
+                // then try .bmp format
+                iRes = ReadBMPfile(&InputImage, szString, &ImageHeader);
+                if (iRes != APP_SUCCESS) {
+                    MessageBox(hDlg, L"Input image file is not valid", L"File read error", MB_OK);
+                    return (INT_PTR)TRUE;
+                }
+            }
+
+            if (ImageHeader.Xsize != 256 || ImageHeader.Ysize != 256) {
+                MessageBox(hDlg, L"Input image file must be 256Hx256V", L"Image format error", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            // Read Header from text file
+            GetDlgItemText(hDlg, IDC_TEXT_INPUT1, szString, MAX_PATH);
+            iRes = ReadBYTEs2Text(szString, Header, 10, FALSE);
+            if (iRes != APP_SUCCESS) {
+                delete[]InputImage;
+                MessageBox(hDlg, L"Header bit text file not valid", L"File read error", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+            WritePrivateProfileString(L"SendASISdlg", L"TextInput1", szString, (LPCTSTR)strAppNameINI);
+
+            // Read Footer from text file
+            GetDlgItemText(hDlg, IDC_TEXT_INPUT2, szString, MAX_PATH);
+            iRes = ReadBYTEs2Text(szString, Footer, 10, FALSE);
+            if (iRes != APP_SUCCESS) {
+                delete[]InputImage;
+                MessageBox(hDlg, L"Footer bit text file not valid", L"File read error", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+            WritePrivateProfileString(L"SendASISdlg", L"TextInput2", szString, (LPCTSTR)strAppNameINI);
+            
+            if (ImageHeader.NumFrames == 3) {
+                CollapseImageFrames(InputImage, &ImageHeader, UseThisThreshold);
+            }
+            else {
+                BinarizeImage(InputImage, &BCAimageHeader, UseThisThreshold);
+            }
+
+            if (NumSteps != 0) {
+                // run BCA to encode
+                // single point CCW rules for BCA
+                int Rules[16] = { 0, 4, 1, 3, 8, 5, 6, 7, 2, 9,10,11,12,13,14,15 };
+                BOOL EvenStep = TRUE;
+   
+                for (int i = 0; i < NumSteps; i++) {
+                    MargolusBCAp1p1(EvenStep, InputImage,
+                        ImageHeader.Xsize, ImageHeader.Ysize, Rules);
+                    EvenStep = !EvenStep;
+                }
+            }
+
+            GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString, MAX_PATH);
+            // Save Image to bitstream
+            BYTE* MessageBody=nullptr;
+            int BitCount;
+            iRes = ConvertImage2Bitstream(InputImage, &ImageHeader, &MessageBody, 8192, FALSE, &BitCount);
+            if (iRes != APP_SUCCESS) {
+                delete[] InputImage;
+                return (INT_PTR)TRUE;
+            }
+            delete[] InputImage;
+
+            iRes = SaveASISbitstream(szString, Header, MessageBody, Footer);
+            if (iRes != APP_SUCCESS) {
+                delete [] MessageBody;
+                MessageBox(hDlg, L"Could not save ASIS bitstream", L"File output error", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            delete[] MessageBody;
+
+            WritePrivateProfileString(L"SendASISdlg", L"MessageOutput", szString, (LPCTSTR)strAppNameINI);
+
+            {
+                // save window position/size data
+                CString csString = L"SendASISdlg";
+                SaveWindowPlacement(hDlg, csString);
+            }
+
+            WCHAR NewMessage[MAX_PATH];
+            swprintf_s(NewMessage, MAX_PATH, L"Generate message complete, %d bits set in image", BitCount);
+            MessageBox(hDlg, NewMessage, L"Send ASIS message", MB_OK);
+
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+
+        case IDCANCEL:
+        {
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+
+        }
+    }
+
+    return (INT_PTR)FALSE;
 }

@@ -85,6 +85,21 @@
 //                        the shortcut were used
 //                      Changed BCA layer raw file input of color based raw image(3 frames)
 //                        to single single binary frame
+// V1.1.0   2024-06-28  Added ASIS receive/send message.
+//                          Recieve reads the ASIS .bin bitstream file and saves a decoded
+//                          .raw image file and a .bmp file
+//                          Send will encode a .raw image file or .bmp file that is 256x256
+//                          and save it as a ASIS bitstream file.  (pixels that have a 
+//                          monochromatic or chromatic brightness <50 are considered 0,
+//                          >= 50 are considered 1)
+//                      Added even/odd controls to Margolus BCA, this shows wether the next
+//                          iteration will be an even (0,0) or odd grid (1,1).  Also allows
+//                          user to change the current selelction.  Note:  ASIS uses an even
+//                          starting grid.
+//                      Allow also the use of .bmp files instead of .raw files for the BCA input
+//                      Automatically save of BMP and (optionally) PNG file when image file is saved
+//                      Corrected handling of BMP files
+//                      Corrected potential memory leak on WM_DESTROY
 // 
 //  This appliction stores user parameters in a Windows style .ini file
 //  The MySETIBCA.ini file must be in the same directory as the exectable
@@ -189,6 +204,8 @@ INT_PTR CALLBACK    ImageDlg(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    Text2StreamDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK    BitImageDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK    MargolusBCADlg(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK    ReceiveASISdlg(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK    SendASISdlg(HWND, UINT, WPARAM, LPARAM);
 
 //*******************************************************************************
 //
@@ -674,8 +691,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 ShowWindow(hwndMargolusBCA, SW_SHOW);
             }
 
-            //DialogBox(hInst, MAKEINTRESOURCE(IDD_CA_MBCA), hWnd, MargolusBCADlg);
             break;
+
+// ASIS menu 
+        case IDM_RECEIVE_ASIS:
+        {
+            DialogBox(hInst, MAKEINTRESOURCE(IDD_RECEIVE_ASIS), hWnd, ReceiveASISdlg);
+            break;
+        }
+
+        case IDM_SEND_ASIS:
+        {
+            DialogBox(hInst, MAKEINTRESOURCE(IDD_SEND_ASIS), hWnd, SendASISdlg);
+            break;
+        }
 
 // Settings menu
 
@@ -809,7 +838,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             // save window position/size data for the Margolus BCA Dialog window
             CString csString = L"MargolusBCAwindow";
             SaveWindowPlacement(hwndMargolusBCA, csString);
-            DestroyWindow(hwndLayers);
+            DestroyWindow(hwndMargolusBCA);
         }
 
         // delete the global classes;

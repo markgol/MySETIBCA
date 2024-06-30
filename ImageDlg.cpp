@@ -236,7 +236,6 @@ INT_PTR CALLBACK ImageDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_DESTROY:
     {
         float sf, pox, poy;
-        int iRes;
         WCHAR szString[40];
 
         // save scaleFactor

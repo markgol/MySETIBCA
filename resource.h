@@ -18,10 +18,12 @@
 #define IDD_IMAGE                       140
 #define IDD_BITTOOLS_TEXT2STREAM        158
 #define IDD_CA_MBCA                     174
+#define IDD_RECEIVE_ASIS                175
+#define IDD_SEND_ASIS                   176
 #define ID_UPDATE                       200
 #define ID_IMG_STATUSBAR                201
 #define ID_UPDATE_BCA_LAYER             202
-#define IDT_BCA_RUN_TIMER				300
+#define IDT_BCA_RUN_TIMER               300
 #define IDC_IMAGE_INPUT_BROWSE          1077
 #define IDC_IMAGE_INPUT                 1078
 #define IDC_IMAGE_OUTPUT                1079
@@ -112,10 +114,18 @@
 #define IDC_ADD_LAYER                   1231
 #define IDC_GLOBAL_KEEP_OPEN            1232
 #define IDC_GLOBAL_CLOSE_ON_OKCANCEL    1233
+#define IDC_TEXT_OUTPUT1                1233
 #define IDC_MOUSE_SCALE                 1234
+#define IDC_TEXT_OUTPUT2                1234
 #define IDC_SCALE_FACTOR                1235
 #define IDC_PAN_OFFSET_X                1236
+#define IDC_TEXT_OUTPUT1_BROWSE         1236
 #define IDC_PAN_OFFSET_Y                1237
+#define IDC_TEXT_OUTPUT2_BROWSE         1237
+#define IDC_EVEN                        1238
+#define IDC_ODD                         1239
+#define IDC_BMP_FILE                    1240
+#define IDC_THRESHOLD                   1241
 #define IDC_TEXT_INPUT1                 1310
 #define IDC_TEXT_INPUT1_BROWSE          1311
 #define IDC_RUN_BACKWARD                1312
@@ -129,6 +139,9 @@
 #define IDC_FORWARD_STEPS               1320
 #define IDC_BACKWARD_STEPS              1321
 #define IDC_FPS_RUN                     1322
+#define IDC_NUM_BCA_STEPS               1323
+#define IDC_NUM_BCA_STEPS2              1324
+#define IDC_NUM_BITS                    1324
 #define IDM_PROPERTIES_SETTINGS         32601
 #define IDM_SETTINGS                    32602
 #define IDC_FILE_OPEN                   32604
@@ -145,8 +158,9 @@
 #define IDM_BITTOOLS_TEXT2BITSTREAM     32636
 #define IDM_BITTOOLS_BINARYIMAGE        32637
 #define IDM_SETTINGS_RESET_WINDOWS      32640
-#define ID_CELLULARAUTOMATA_MARGOLUSCA  32641
 #define IDM_CA_MBCA                     32642
+#define IDM_SEND_ASIS                   32645
+#define IDM_RECEIVE_ASIS                32646
 #define IDM_RESET_ZOOM                  32783
 #define IDM_RESET_PAN                   32784
 #define IDM_CROSSHAIRS                  32789
@@ -159,8 +173,8 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        203
-#define _APS_NEXT_COMMAND_VALUE         32643
-#define _APS_NEXT_CONTROL_VALUE         1232
+#define _APS_NEXT_COMMAND_VALUE         32647
+#define _APS_NEXT_CONTROL_VALUE         1242
 #define _APS_NEXT_SYMED_VALUE           300
 #endif
 #endif
