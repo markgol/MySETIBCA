@@ -1,0 +1,53 @@
+The symbol library has 2 directories; us and et
+The 'us' directory has the amino acid image files using the 22 amino acids we are familiar with
+The 'et' directory has the amino acid image files using the 5 amino acids that were sent in the message.
+
+The insertion handle for all images is 6,12.  This is zero based.  This is position of the upper left nitrogen symbol in the image.
+
+Filename format
+a b.ttt
+
+a	symbol name, one of more characters
+b	'us' for our symbols, 'et' for ET's symbols
+
+ttt	File extension or type
+	bmp bitmap file
+	raw raw image file
+	Note:  This only indicates file format  If there are 2 or more files
+	with the same name but different extensions thay should form identical images
+
+a b	symbol name plus the set designator (ours or ET's) represent different amino acids
+
+	a	b (us)
+		3 leter	Amino acid name		# of bits used
+	A	Ala	Alanine			87
+	R	Arg	Arginine		172
+	N	Asn	Asparagine		124
+	D	Asp	Aspartate		118
+	C	Cys	Cysteine		106
+	Q	Gln	Glutamine		142
+	E	Glu	Glutamate		138
+	G	Gly	Glycine			74
+	H	His	Histidine		145
+	I	Ile	Isoleucine		138
+	L	Leu	Leucine			139
+	K	Lys	Lysine			153
+	M	Met	Methionine		141
+	F	Phe	Phenylalanine		162
+	P	Pro	Proline			
+	S	Ser	Serine			98
+	T	Thr	Threonine		115
+	W	Trp	Tryptophan		
+	Y	Tyr	Tyrosine		
+	V	Val	Valine			121
+	U	Sec	Selenocysteine		120
+	O	Pyl	Pyrrolysine		264
+
+	a	b(et) 
+			Amino acid name				# of bits used	
+	A		2-Aminobutyric acid			104
+	B		Norleucine				138
+	C		2,4-diaminobutyric acid			118
+	D		L-Aspartic acid, 3-methyl-,(3R)-	138
+			or 2-Amino-3-methylsuccinic acid 	
+	E		Norvaline				121

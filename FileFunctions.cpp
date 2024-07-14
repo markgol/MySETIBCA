@@ -28,6 +28,7 @@
 //                      Corrected bug when reading BMP files
 //                          ReadBMPfile() is corrected function
 //                          deleted LoadBMPfile()
+// V1.1.2   2024-07-06  Added SaveHistogramData()
 // 
 //  This module is a copy of the FileFunctions module used in MySETIviewer and customized
 //  for this application
@@ -2039,6 +2040,66 @@ int SaveASISbitstream(WCHAR* Filename, BYTE* Header, BYTE* MessageBody, BYTE* Fo
         fclose(Out);
         return APPERR_FILEWRITE;
     }
+
+    fclose(Out);
+
+    return APP_SUCCESS;
+}
+
+//*******************************************************************
+//
+// SaveHistogramData
+// 
+// Save histogram data to .csv file
+// 
+//*******************************************************************
+int SaveHistogramData(WCHAR* Filename, BOOL CreateNew, int Index, int* Histogram, int NumEntries)
+{
+    FILE* Out;
+    errno_t ErrNum;
+
+    // disassemble filename, create new filename with .txt extension
+    WCHAR NewFilename[MAX_PATH];
+    {
+        //parse for just filename
+        int err;
+        WCHAR Drive[_MAX_DRIVE];
+        WCHAR Dir[_MAX_DIR];
+        WCHAR Fname[_MAX_FNAME];
+        WCHAR Ext[_MAX_EXT];
+
+        // split apart original filename
+        err = _wsplitpath_s(Filename, Drive, _MAX_DRIVE, Dir, _MAX_DIR, Fname,
+            _MAX_FNAME, Ext, _MAX_EXT);
+        if (err != 0) {
+            return APPERR_FILEOPEN;
+        }
+
+        err = _wmakepath_s(NewFilename, _MAX_PATH, Drive, Dir, Fname, L".csv");
+        if (err != 0) {
+            return APPERR_FILEOPEN;
+        }
+    }
+
+    if (CreateNew) {
+        ErrNum = _wfopen_s(&Out, NewFilename, L"w");
+        if (Out == NULL) {
+            return APPERR_FILEOPEN;
+        }
+    }
+    else {
+        ErrNum = _wfopen_s(&Out, NewFilename, L"a");
+        if (Out == NULL) {
+            return APPERR_FILEOPEN;
+        }
+    }
+
+    // write new line of data to file
+    fprintf(Out, "%10d,", Index);
+    for (int i = 0; i < (NumEntries-1); i++) {
+        fprintf(Out, " %10d,", Histogram[i]);
+    }
+    fprintf(Out, " %10d\n", Histogram[NumEntries-1]);
 
     fclose(Out);
 

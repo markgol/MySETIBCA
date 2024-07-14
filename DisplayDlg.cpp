@@ -19,6 +19,7 @@
 // If not, see < https://www.gnu.org/licenses/>.
 // 
 // V1.0.0	2024-06-21	Initial release
+// V1.1.2   2024-07-13  Correction, Enable Grid had inconsistencies
 //
 // This file contains the dialog callback procedures for the Display class
 // 
@@ -444,6 +445,13 @@ INT_PTR CALLBACK SettingsDisplayDlg(HWND hDlg, UINT message, WPARAM wParam, LPAR
 void LoadDisplaySettings(HWND hDlg)
 {
     int x, y;
+
+    if (!Displays->IsGridEnabled()) {
+        CheckDlgButton(hDlg, IDC_ENABLE, BST_UNCHECKED);
+    }
+    else {
+        CheckDlgButton(hDlg, IDC_ENABLE, BST_CHECKED);
+    }
 
     Displays->GetGridMajor(&x, &y);
     // IDC_GRID_X_MAJOR

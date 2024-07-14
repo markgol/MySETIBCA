@@ -49,9 +49,15 @@
 #define IDC_ABOUT_NAME                  1101
 #define IDC_XSIZE                       1102
 #define IDC_CURRENT_ITERATION           1107
+#define IDC_HISTO0                      1108
+#define IDC_HISTO1                      1109
 #define IDC_NUM_FRAMES                  1110
 #define IDC_ABOUT_COPYRIGHT             1111
+#define IDC_HISTO2                      1111
+#define IDC_HISTO3                      1112
+#define IDC_HISTO4                      1113
 #define IDC_SETTINGS_AUTO_PNG           1114
+#define IDC_CURRENT_BITS                1114
 #define IDC_SETTINGS_START_LAST         1115
 #define IDC_GRID_ENABLE                 1116
 #define IDC_SETTINGS_STATUSBAR          1116
@@ -126,6 +132,9 @@
 #define IDC_ODD                         1239
 #define IDC_BMP_FILE                    1240
 #define IDC_THRESHOLD                   1241
+#define IDC_HISTO_FILE                  1242
+#define IDC_CHECK1                      1246
+#define IDC_USE_STEPS                   1246
 #define IDC_TEXT_INPUT1                 1310
 #define IDC_TEXT_INPUT1_BROWSE          1311
 #define IDC_RUN_BACKWARD                1312
@@ -174,7 +183,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        203
 #define _APS_NEXT_COMMAND_VALUE         32647
-#define _APS_NEXT_CONTROL_VALUE         1242
+#define _APS_NEXT_CONTROL_VALUE         1247
 #define _APS_NEXT_SYMED_VALUE           300
 #endif
 #endif

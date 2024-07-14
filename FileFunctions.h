@@ -22,3 +22,4 @@ int SaveBYTEs2Text(WCHAR* OutputFile, BYTE* ByteStream,
 int ReadBYTEs2Text(WCHAR* InputFile, BYTE* ByteStream,
     int NumBytes, int BitOrder);
 int SaveASISbitstream(WCHAR* Filename, BYTE* Header, BYTE* MessageBody, BYTE* Footer);
+int SaveHistogramData(WCHAR* Filename, BOOL CreateNew, int Index, int* Histogram, int NumEntries);

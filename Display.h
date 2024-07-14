@@ -71,8 +71,8 @@ public:
 	void EnableGrid(BOOL Enable);
 
 private:
-	// grid are on by default
-	BOOL GridEnabled = TRUE;
+	// grid are off by default
+	BOOL GridEnabled = FALSE;
 
 	// color setting tables for Display
 	COLORREF rgbBackground = 0;      // display background color

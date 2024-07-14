@@ -800,4 +800,3 @@ int ConvertText2BitStream(HWND hDlg, WCHAR* InputFile, WCHAR* OutputFile, int Bi
     fclose(Out);
     return 1;
 }
-

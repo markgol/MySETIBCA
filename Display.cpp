@@ -23,6 +23,7 @@
 // used in creating multiple image overlays for display
 // 
 // V1.0.0	2024-06-21	Initial release
+// V1.1.2   2024-07-09  Corrected bug when initializing and the 'grid' is disabled
 //
 // Application standardized error numbers for functions:
 //		See AppErrors.h
@@ -725,7 +726,7 @@ void Display::LoadConfiguration(WCHAR* szFilename)
     
     COLORREF Color;
 
-    BOOL Enable = (int)GetPrivateProfileInt(L"Display", L"EnableGrid", 1, (LPCTSTR)szFilename);
+    BOOL Enable = (int)GetPrivateProfileInt(L"Display", L"EnableGrid", 0, (LPCTSTR)szFilename);
     EnableGrid(Enable);
 
     x = (int) GetPrivateProfileInt(L"Display", L"GridXmajor",1, (LPCTSTR)szFilename);
@@ -771,10 +772,10 @@ int Display::SaveConfiguration(WCHAR* szFilename)
 
     BOOL Enable = IsGridEnabled();
     if (!Enable) {
-        WritePrivateProfileString(L"Display", L"GridEnable", L"0", (LPCTSTR)szFilename);
+        WritePrivateProfileString(L"Display", L"EnableGrid", L"0", (LPCTSTR)szFilename);
     }
     else {
-        WritePrivateProfileString(L"Display", L"GridEnable", L"1", (LPCTSTR)szFilename);
+        WritePrivateProfileString(L"Display", L"EnableGrid", L"1", (LPCTSTR)szFilename);
     }
 
     GetGridMajor(&x, &y);

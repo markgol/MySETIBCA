@@ -20,6 +20,7 @@
 // 
 //
 // V1.0.0	2024-06-21	Initial release
+// V1.1.2   2024-07-06  Changed default size of display to be 256x256, save user settings for min size
 //
 //  This module is a copy of the LayersDlg module used in MySETIviewer and customized
 //  for this application
@@ -206,12 +207,13 @@ INT_PTR CALLBACK SettingsLayersDlg(HWND hDlg, UINT message, WPARAM wParam, LPARA
 
                     ImageLayers->EnableLayer(Selection);
                     if (Selection == 0) {
-                        swprintf_s(szString, MAX_PATH, L"Enabled:  %d iter, %dHx%dV, %s", 
+                        swprintf_s(szString, MAX_PATH, L"Enabled:  %d iter, %dHx%dV, %s",
                             CurrentIteration, x, y,
                             ImageLayers->LayerFilename[Selection]);
                     }
                     else {
-                        swprintf_s(szString, MAX_PATH, L"Enabled:  %dHx%dV, %s", x, y,
+                        int Count = ImageLayers->GetBits(Selection);
+                        swprintf_s(szString, MAX_PATH, L"Enabled:  %dHx%dV, %d #bits, %s", x, y, Count,
                             ImageLayers->LayerFilename[Selection]);
                     }
                     ReplaceListBoxEntry(hDlg, IDC_LAYER_LIST, Selection, szString);
@@ -224,7 +226,8 @@ INT_PTR CALLBACK SettingsLayersDlg(HWND hDlg, UINT message, WPARAM wParam, LPARA
                             ImageLayers->LayerFilename[Selection]);
                     }
                     else {
-                        swprintf_s(szString, MAX_PATH, L"Disabled: %dHx%dV, %s", x, y,
+                        int Count = ImageLayers->GetBits(Selection);
+                        swprintf_s(szString, MAX_PATH, L"Disabled: %dHx%dV, %d #bits, %s", x, y, Count,
                             ImageLayers->LayerFilename[Selection]);
                     }
                     ReplaceListBoxEntry(hDlg, IDC_LAYER_LIST, Selection, szString);
@@ -301,14 +304,16 @@ INT_PTR CALLBACK SettingsLayersDlg(HWND hDlg, UINT message, WPARAM wParam, LPARA
                 HWND ListHwnd = GetDlgItem(hDlg, IDC_LAYER_LIST);
                 WCHAR szString[MAX_PATH];
                 int x, y;
+                int Count;
 
+                Count = ImageLayers->GetBits(Layer);
                 ImageLayers->GetSize(Layer, &x, &y);
                 if (ImageLayers->IsLayerEnabled(Layer)) {
-                    swprintf_s(szString, MAX_PATH, L"Enabled:  %dHx%dV, %s", x, y,
+                    swprintf_s(szString, MAX_PATH, L"Enabled:  %dHx%dV, %d bits, %s", x, y, Count,
                         ImageLayers->LayerFilename[Layer]);
                 }
                 else {
-                    swprintf_s(szString, MAX_PATH, L"Disabled: %dHx%dV, %s", x, y,
+                    swprintf_s(szString, MAX_PATH, L"Disabled: %dHx%dV, %d bits, %s", x, y, Count,
                         ImageLayers->LayerFilename[Layer]);
                 }
                 // AddString
@@ -669,6 +674,10 @@ INT_PTR CALLBACK SettingsLayersDlg(HWND hDlg, UINT message, WPARAM wParam, LPARA
                     return (INT_PTR)TRUE;
                 }
                 ImageLayers->SetMinOverlaySize(x, y);
+                swprintf_s(szString, 20, L"%u", x);
+                WritePrivateProfileString(L"SettingsDlg", L"MinOverlaySizeX", szString, (LPCTSTR)strAppNameINI);
+                swprintf_s(szString, 20, L"%u", y);
+                WritePrivateProfileString(L"SettingsDlg", L"MinOverlaySizeY", szString, (LPCTSTR)strAppNameINI);
             }
 
             for (int i = 0; i < 16; i++) {
@@ -825,13 +834,14 @@ void LoadLayerList(HWND hDlg, int CurrentLayer)
 
         for (int i = 1; i < NumLayers; i++) {
             // add Layer number, fname.ext string, x,y size to combo box
+            int Count = ImageLayers->GetBits(i);
             ImageLayers->GetSize(i, &x, &y);
             if (ImageLayers->IsLayerEnabled(i)) {
-                swprintf_s(szString, MAX_PATH, L"Enabled:  %dHx%dV, %s", x, y,
+                swprintf_s(szString, MAX_PATH, L"Enabled:  %dHx%dV, %d #bits, %s", x, y, Count,
                     ImageLayers->LayerFilename[i]);
             }
             else {
-                swprintf_s(szString, MAX_PATH, L"Disabled: %dHx%dV, %s", x, y,
+                swprintf_s(szString, MAX_PATH, L"Disabled: %dHx%dV, %d #bits, %s", x, y, Count,
                     ImageLayers->LayerFilename[i]);
             }
             // AddString

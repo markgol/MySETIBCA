@@ -36,6 +36,17 @@
 //                          starting grid.
 //                      Allow also the use of .bmp file instead of .raw file
 //                      Automatically save of BMP and (optionally) PNG file when image file is saved
+// V1.1.2   2024-07-10  Added histogram of # bits set in 2x2 block for image
+//                      Added current non zero bit count to BCA dialog
+//                      Send ASIS message saves the number of iterations as default for next time
+//                      Allow override of iterations specfied in the Receive ASIS message
+//                      Allow generation of footer based on # iterations selected rather than use a file
+//                      Correction, removed bit order selection from send and receive ASIS message
+//                          We know what order ASIS used and the compiler was incorrectly optimizing
+//                          the selection criteria with different result for Debug and and Release 
+//                      Correction, filename extension  for send message corrected to default of .bin
+//                      Correction, default filename for footer was the header file
+//                      Correction, Receive ASIS message starting EvenStep = FALSE when # of iterations is even
 // 
 // Cellular Automata tools dialog box handlers
 // 
@@ -53,6 +64,7 @@
 #include <shobjidl.h>
 #include <winver.h>
 #include <vector>
+#include <cmath>
 #include <atlstr.h>
 #include <strsafe.h>
 #include <atlstr.h>
@@ -64,6 +76,8 @@
 #include "CA.h"
 #include "FileFunctions.h"
 #include "shellapi.h"
+
+BOOL NewHistoFile = TRUE;
 
 // Add new callback prototype declarations in my MySETIBCA.cpp
 
@@ -140,6 +154,11 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             CheckDlgButton(hDlg, IDC_BMP_FILE, BST_CHECKED);
         }
 
+        iRes = GetPrivateProfileInt(L"MargolusBCADlg", L"HistoFileSave", 0, (LPCTSTR)strAppNameINI);
+        if (iRes != 0) {
+            CheckDlgButton(hDlg, IDC_HISTO_FILE, BST_CHECKED);
+        }
+
         SetDlgItemText(hDlg, IDC_CURRENT_ITERATION, L"0");
         
         EvenStep = TRUE;
@@ -149,7 +168,7 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         else {
             CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_ODD);
         }
-
+        
         CurrentIteration = 0;
         BCAimageLoaded = FALSE;
 
@@ -303,6 +322,8 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             BOOL bSuccess;
             int BackwardLimit;
             int NumberSteps;
+            int Histo[5] = { 0,0,0,0,0 };
+            BOOL HistoFileSave = FALSE;
 
             if (!BCAimageLoaded) {
                 // This really shouldn't ever get here but just in case
@@ -332,23 +353,51 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 return (INT_PTR)TRUE;
             }
 
+            if (IsDlgButtonChecked(hDlg, IDC_HISTO_FILE) == BST_CHECKED) {
+                HistoFileSave = TRUE;
+            }
+
             for (int i = 0; i < NumberSteps; i++) {
                 // step backward on iteration
                 EvenStep = !EvenStep;
+                Histo[0] = 0;
+                Histo[1] = 0;
+                Histo[2] = 0;
+                Histo[3] = 0;
+                Histo[4] = 0;
                 MargolusBCAp1p1(EvenStep, TheImage,
-                    BCAimageHeader.Xsize, BCAimageHeader.Ysize, BackwardRules);
+                    BCAimageHeader.Xsize, BCAimageHeader.Ysize,
+                    BackwardRules, Histo);
                 CurrentIteration--;
+                if (HistoFileSave) {
+                    WCHAR Filename[MAX_PATH];
+                    GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, Filename, MAX_PATH);
+                    SaveHistogramData(Filename, NewHistoFile, CurrentIteration, Histo, 5);
+                    NewHistoFile = FALSE;
+                }
                 if (CurrentIteration <= BackwardLimit) break;
             }
 
+            // update bit count
+            int Count = CountBitInImage(TheImage, &BCAimageHeader);
+            SetDlgItemInt(hDlg, IDC_CURRENT_BITS, Count, TRUE);
+
             // update current iteration
             SetDlgItemInt(hDlg, IDC_CURRENT_ITERATION, CurrentIteration, TRUE);
+            
+            // update step radio buttons
             if (EvenStep) {
                 CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_EVEN);
             }
             else {
                 CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_ODD);
             }
+            // update histogram data
+            SetDlgItemInt(hDlg, IDC_HISTO0, Histo[0], TRUE);
+            SetDlgItemInt(hDlg, IDC_HISTO1, Histo[1], TRUE);
+            SetDlgItemInt(hDlg, IDC_HISTO2, Histo[2], TRUE);
+            SetDlgItemInt(hDlg, IDC_HISTO3, Histo[3], TRUE);
+            SetDlgItemInt(hDlg, IDC_HISTO4, Histo[4], TRUE);
 
             // update displays
             SendMessage(hwndLayers, WM_COMMAND, ID_UPDATE, 1); // apply 
@@ -361,6 +410,8 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             BOOL bSuccess;
             int NumberSteps;
             int ForwardLimit;
+            int Histo[5] = { 0,0,0,0,0 };
+            BOOL HistoFileSave = FALSE;
 
             if (!BCAimageLoaded) {
                 // This really shouldn't ever get here but just in case
@@ -390,15 +441,37 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 return (INT_PTR)TRUE;
             }
 
+            if (IsDlgButtonChecked(hDlg, IDC_HISTO_FILE) == BST_CHECKED) {
+                HistoFileSave = TRUE;
+            }
+
             for (int i = 0; i < NumberSteps; i++) {
+                Histo[0] = 0;
+                Histo[1] = 0;
+                Histo[2] = 0;
+                Histo[3] = 0;
+                Histo[4] = 0;
+
                 // step forward on iteration
                 MargolusBCAp1p1(EvenStep, TheImage,
-                    BCAimageHeader.Xsize, BCAimageHeader.Ysize, ForwardRules);
+                    BCAimageHeader.Xsize, BCAimageHeader.Ysize,
+                    ForwardRules, Histo);
 
                 CurrentIteration++;
+                if (HistoFileSave) {
+                    WCHAR Filename[MAX_PATH];
+                    GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, Filename, MAX_PATH);
+                    SaveHistogramData(Filename, NewHistoFile, CurrentIteration, Histo, 5);
+                    NewHistoFile = FALSE;
+                }
+
                 EvenStep = !EvenStep;
                 if (CurrentIteration >= ForwardLimit) break;
             }
+
+            // update bit count
+            int Count = CountBitInImage(TheImage, &BCAimageHeader);
+            SetDlgItemInt(hDlg, IDC_CURRENT_BITS, Count, TRUE);
 
             // update current iteration
             SetDlgItemInt(hDlg, IDC_CURRENT_ITERATION, CurrentIteration, TRUE);
@@ -409,6 +482,13 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             else {
                 CheckRadioButton(hDlg, IDC_EVEN, IDC_ODD, IDC_ODD);
             }
+
+            // update histogram data
+            SetDlgItemInt(hDlg, IDC_HISTO0, Histo[0], TRUE);
+            SetDlgItemInt(hDlg, IDC_HISTO1, Histo[1], TRUE);
+            SetDlgItemInt(hDlg, IDC_HISTO2, Histo[2], TRUE);
+            SetDlgItemInt(hDlg, IDC_HISTO3, Histo[3], TRUE);
+            SetDlgItemInt(hDlg, IDC_HISTO4, Histo[4], TRUE);
 
             // update displays
             SendMessage(hwndLayers, WM_COMMAND, ID_UPDATE, 1); // apply 
@@ -575,6 +655,7 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
             // Disable Layer 0 in Display dialog
             ImageLayers->DisableLayer(0);
+            NewHistoFile = TRUE;
 
             // read forward rules file
             GetDlgItemText(hDlg, IDC_TEXT_INPUT1, InputFile, MAX_PATH);
@@ -644,6 +725,16 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             else {
                 BinarizeImage(TheImage, &BCAimageHeader, UseThisThreshold);
             }
+            // clear histogram
+            SetDlgItemText(hDlg, IDC_HISTO0, L"");
+            SetDlgItemText(hDlg, IDC_HISTO1, L"");
+            SetDlgItemText(hDlg, IDC_HISTO2, L"");
+            SetDlgItemText(hDlg, IDC_HISTO3, L"");
+            SetDlgItemText(hDlg, IDC_HISTO4, L"");
+
+            // update bit count
+            int Count = CountBitInImage(TheImage, &BCAimageHeader);
+            SetDlgItemInt(hDlg, IDC_CURRENT_BITS, Count, TRUE);
 
             // update Layer 0 in display dialog
             ImageLayers->UpdateLayer(0, InputFile, TheImage, BCAimageHeader.Xsize, BCAimageHeader.Ysize);
@@ -803,6 +894,13 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             }
             else {
                 WritePrivateProfileString(L"MargolusBCADlg", L"AutoBMP", L"0", (LPCTSTR)strAppNameINI);
+            }
+
+            if (IsDlgButtonChecked(hDlg, IDC_HISTO_FILE) == BST_CHECKED) {
+                WritePrivateProfileString(L"MargolusBCADlg", L"HistoFileSave", L"1", (LPCTSTR)strAppNameINI);
+            }
+            else {
+                WritePrivateProfileString(L"MargolusBCADlg", L"HistoFileSave", L"0", (LPCTSTR)strAppNameINI);
             }
 
             {
@@ -1010,9 +1108,19 @@ INT_PTR CALLBACK ReceiveASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             int IterationsNeeded;
             int BitCount;
 
+            int IterationsInFooter;
+
+            // read iterations from dialog control
+            BOOL bSuccess;
+            IterationsNeeded = GetDlgItemInt(hDlg, IDC_NUM_BCA_STEPS, &bSuccess, TRUE);
+            if (!bSuccess) {
+                MessageBox(hDlg, L"invalid number of iterations", L"Invalid number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
             // read input file
             iRes = ReadASISmessage(szString, &ImageHeader, &InputImage, Header, Footer, 
-                &IterationsNeeded, &BitCount);
+                &IterationsInFooter, &BitCount);
             if (iRes != APP_SUCCESS) {
                 MessageBox(hDlg, L"Input file is not an ASIS message", L"Read error", MB_OK);
                 return (INT_PTR)TRUE;
@@ -1040,12 +1148,22 @@ INT_PTR CALLBACK ReceiveASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             // run BCA to decode
             // single point CW rules for BCA
             int Rules[16] = { 0, 2, 8, 3, 1, 5, 6, 7, 4, 9,10,11,12,13,14,15};
-            BOOL EvenStep = TRUE;
+            int Histo[5] = { 0,0,0,0,0 };
+
+            // EvenStep is true if the number of iterations is odd
+            // EvenStep is false if the number of iterations is even
+            BOOL EvenStep;
+            if (IterationsNeeded % 2) {
+                EvenStep = TRUE;
+            }
+            else {
+                EvenStep = FALSE;
+            }
             
             for (int i = 0; i < IterationsNeeded; i++) {
                 // step forward on iteration
                 MargolusBCAp1p1(EvenStep, InputImage,
-                    ImageHeader.Xsize, ImageHeader.Ysize, Rules);
+                    ImageHeader.Xsize, ImageHeader.Ysize, Rules, Histo);
                 EvenStep = !EvenStep;
             }
 
@@ -1086,7 +1204,7 @@ INT_PTR CALLBACK ReceiveASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 // reassemble filename as .bmp file
                 err = _wmakepath_s(BMPFilename, _MAX_PATH, Drive, Dir, Fname, L".bmp");
                 if (err != 0) {
-                    MessageBox(hDlg, L"Could not creat output filename", L"BCA save image", MB_OK);
+                    MessageBox(hDlg, L"Could not creat output filename", L"Receive ASIS message", MB_OK);
                     return (INT_PTR)TRUE;
                 }
 
@@ -1108,7 +1226,7 @@ INT_PTR CALLBACK ReceiveASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             WCHAR NewMessage[MAX_PATH];
             swprintf_s(NewMessage, MAX_PATH, L"Decode message complete\n%d iterations\n%d bits set in image",
                 IterationsNeeded, BitCount);
-            MessageBox(hDlg, NewMessage, L"Send ASIS message", MB_OK);
+            MessageBox(hDlg, NewMessage, L"Receive ASIS message", MB_OK);
 
             EndDialog(hDlg, LOWORD(wParam));
             return (INT_PTR)TRUE;
@@ -1142,6 +1260,11 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
     {
         IMAGINGHEADER ImageHeader;
         int BCAiterations = 0;
+
+        int iRes = GetPrivateProfileInt(L"SendASISdlg", L"UseIterations", 0, (LPCTSTR)strAppNameINI);
+        if (iRes != 0) {
+            CheckDlgButton(hDlg, IDC_USE_STEPS, BST_CHECKED);
+        }
 
         GetPrivateProfileString(L"SendASISdlg", L"ImageInput",
             L"C:\\MySETIBCA\\Data\\MyMessage.raw", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
@@ -1265,7 +1388,7 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
         case IDC_TEXT_INPUT2_BROWSE:
         {
             PWSTR pszFilename;
-            GetDlgItemText(hDlg, IDC_TEXT_INPUT1, szString, MAX_PATH);
+            GetDlgItemText(hDlg, IDC_TEXT_INPUT2, szString, MAX_PATH);
             COMDLG_FILTERSPEC textType[] =
             {
                  { L"text files", L"*.txt" },
@@ -1288,10 +1411,10 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
             GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString, MAX_PATH);
             COMDLG_FILTERSPEC rawType[] =
             {
-                 { L"text files", L"*.raw" },
+                 { L"bin files", L"*.bin" },
                  { L"All Files", L"*.*" },
             };
-            if (!CCFileSave(hDlg, szString, &pszFilename, FALSE, 2, rawType, L"*.raw")) {
+            if (!CCFileSave(hDlg, szString, &pszFilename, FALSE, 2, rawType, L"*.bin")) {
                 return (INT_PTR)TRUE;
             }
             {
@@ -1307,6 +1430,16 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
         {
             BOOL bSuccess;
             int NumSteps;
+            BOOL UseIterations = FALSE;
+
+            UseIterations = IsDlgButtonChecked(hDlg, IDC_USE_STEPS) == BST_CHECKED;
+            if (UseIterations) {
+                WritePrivateProfileString(L"SendASISdlg", L"UseIterations", L"1", (LPCTSTR)strAppNameINI);
+            }
+            else {
+                WritePrivateProfileString(L"SendASISdlg", L"UseIterations", L"0", (LPCTSTR)strAppNameINI);
+            }
+
             NumSteps = GetDlgItemInt(hDlg, IDC_NUM_BCA_STEPS, &bSuccess, TRUE);
             if (!bSuccess) {
                 MessageBox(hDlg, L"Invalid # iterations", L"Bad Number", MB_OK);
@@ -1317,23 +1450,52 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
                 return (INT_PTR)TRUE;
             }
 
+            // check if this can be encoded as a unary expression in 79 bits 
+            std::vector<std::vector<int>> combinations;
+
+            if (UseIterations) {
+                combinations = factorCombinations(NumSteps);
+
+                // only need to look at first combination
+                int NumBits = 0;
+                auto& combination = combinations[0];
+                for (int factor : combination) {
+                    NumBits += factor;
+                }
+
+                if (NumBits > 79) {
+                    // Clear the combinations vector before reusing it
+                    combinations.clear();
+                    MessageBox(hDlg, L"# iterations can NOT be encoded into unary formatted footer\nChoose a different number of iterations",
+                        L"Unary number exceeds 79 bits", MB_OK);
+                    return (INT_PTR)TRUE;
+                }
+            }
+
+            GetDlgItemText(hDlg, IDC_NUM_BCA_STEPS, szString, MAX_PATH);
+            WritePrivateProfileString(L"SendASISdlg", L"BCAiterations", szString, (LPCTSTR)strAppNameINI);
+            
             int UseThisThreshold;
 
             UseThisThreshold = GetDlgItemInt(hDlg, IDC_THRESHOLD, &bSuccess, TRUE);
             if (!bSuccess || UseThisThreshold <= 0) {
+                if (UseIterations) {
+                    combinations.clear();
+                }
                 MessageBox(hDlg, L"Invalid threshold or <= 0", L"Bad Number", MB_OK);
                 return (INT_PTR)TRUE;
             }
-            GetDlgItemText(hDlg, IDC_THRESHOLD, szString, MAX_PATH);
 
+            GetDlgItemText(hDlg, IDC_THRESHOLD, szString, MAX_PATH);
             WritePrivateProfileString(L"SendASISdlg", L"Threshold", szString, (LPCTSTR)strAppNameINI);
+
             GetDlgItemText(hDlg, IDC_IMAGE_INPUT, szString, MAX_PATH);
             WritePrivateProfileString(L"SendASISdlg", L"ImageInput", szString, (LPCTSTR)strAppNameINI);
             
             // read the image file
             int iRes;
             BYTE Header[10];
-            BYTE Footer[10];
+            BYTE Footer[10] = { 0,0,0,0,0,0,0,0,0,0 };
             int* InputImage = nullptr;
             IMAGINGHEADER ImageHeader;
 
@@ -1344,12 +1506,18 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
                 // then try .bmp format
                 iRes = ReadBMPfile(&InputImage, szString, &ImageHeader);
                 if (iRes != APP_SUCCESS) {
+                    if (UseIterations) {
+                        combinations.clear();
+                    }
                     MessageBox(hDlg, L"Input image file is not valid", L"File read error", MB_OK);
                     return (INT_PTR)TRUE;
                 }
             }
 
             if (ImageHeader.Xsize != 256 || ImageHeader.Ysize != 256) {
+                if (UseIterations) {
+                    combinations.clear();
+                }
                 MessageBox(hDlg, L"Input image file must be 256Hx256V", L"Image format error", MB_OK);
                 return (INT_PTR)TRUE;
             }
@@ -1359,21 +1527,76 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
             iRes = ReadBYTEs2Text(szString, Header, 10, FALSE);
             if (iRes != APP_SUCCESS) {
                 delete[]InputImage;
+                if (UseIterations) {
+                    combinations.clear();
+                }
                 MessageBox(hDlg, L"Header bit text file not valid", L"File read error", MB_OK);
                 return (INT_PTR)TRUE;
             }
             WritePrivateProfileString(L"SendASISdlg", L"TextInput1", szString, (LPCTSTR)strAppNameINI);
 
+            
             // Read Footer from text file
             GetDlgItemText(hDlg, IDC_TEXT_INPUT2, szString, MAX_PATH);
-            iRes = ReadBYTEs2Text(szString, Footer, 10, FALSE);
-            if (iRes != APP_SUCCESS) {
-                delete[]InputImage;
-                MessageBox(hDlg, L"Footer bit text file not valid", L"File read error", MB_OK);
-                return (INT_PTR)TRUE;
+            if (!UseIterations) {
+                iRes = ReadBYTEs2Text(szString, Footer, 10, FALSE);
+                if (iRes != APP_SUCCESS) {
+                    delete[]InputImage;
+                    MessageBox(hDlg, L"Footer bit text file not valid", L"File read error", MB_OK);
+                    return (INT_PTR)TRUE;
+                }
+                WritePrivateProfileString(L"SendASISdlg", L"TextInput2", szString, (LPCTSTR)strAppNameINI);
             }
-            WritePrivateProfileString(L"SendASISdlg", L"TextInput2", szString, (LPCTSTR)strAppNameINI);
+            else {
+                // create footer from factors combination list
+                BYTE CurrentByte = 0;
+                int CurrentBit = 0;
+                BOOL OddBit = TRUE;
+                auto& combination = combinations[0];
+
+                for (int factor : combination) {
+                    // set factor number of bits
+                    for (int i = 0; i < factor; i++) {
+                        if (OddBit) {
+                            // set to ones
+                            Footer[CurrentByte] = Footer[CurrentByte] | (0x80 >> CurrentBit);
+                        }
+                        // the footer is initillay already all zeros so no need to set those
+                        CurrentBit++;
+                        if (CurrentBit >= 8) {
+                            CurrentBit = 0;
+                            CurrentByte++;
+                            if (CurrentByte >= 10) {
+                                // things are broken, this should never happens
+                                combinations.clear();
+                                delete[] InputImage;
+                                MessageBox(hDlg, L"Program failure generating footer\nfrom iterations specified",
+                                    L"Array boundary error", MB_OK);
+                                return (INT_PTR)TRUE;
+                            }
+                        }
+                    }
+                    OddBit = !OddBit;
+                }
+                if (OddBit) {
+                    // fill out rest of bits with 1s out to 80
+                    if (CurrentBit != 0) {
+                        for (int i = CurrentBit; i < 8; i++) {
+                            Footer[CurrentByte] = Footer[CurrentByte] | (0x80 >> i);
+                        }
+                        CurrentByte++;
+                    }
+                    for (int i = CurrentByte; i < 10; i++) {
+                        Footer[CurrentByte] = 0xff;
+                    }
+                }
+                // no need to zero fill, already done at initialization
+            }
             
+            if (UseIterations) {
+                combinations.clear();
+            }
+
             if (ImageHeader.NumFrames == 3) {
                 CollapseImageFrames(InputImage, &ImageHeader, UseThisThreshold);
             }
@@ -1385,20 +1608,69 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
                 // run BCA to encode
                 // single point CCW rules for BCA
                 int Rules[16] = { 0, 4, 1, 3, 8, 5, 6, 7, 2, 9,10,11,12,13,14,15 };
+                int Histo[5] = { 0,0,0,0,0 };
                 BOOL EvenStep = TRUE;
    
                 for (int i = 0; i < NumSteps; i++) {
                     MargolusBCAp1p1(EvenStep, InputImage,
-                        ImageHeader.Xsize, ImageHeader.Ysize, Rules);
+                        ImageHeader.Xsize, ImageHeader.Ysize, Rules, Histo);
                     EvenStep = !EvenStep;
                 }
             }
 
             GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, szString, MAX_PATH);
+            /*
+            {
+                // diagnostic section
+                WCHAR BMPFilename[MAX_PATH];
+                WCHAR RawFilename[MAX_PATH];
+                WCHAR Drive[_MAX_DRIVE];
+                WCHAR Dir[_MAX_DIR];
+                WCHAR Fname[_MAX_FNAME];
+                WCHAR Ext[_MAX_EXT];
+
+                // split apart original filename
+                int err;
+                err = _wsplitpath_s(szString, Drive, _MAX_DRIVE, Dir, _MAX_DIR, Fname,
+                    _MAX_FNAME, Ext, _MAX_EXT);
+                if (err != 0) {
+                    delete[]InputImage;
+                    MessageBox(hDlg, L"Could not create diagnostic output filename", L"Send ASIS message", MB_OK);
+                    return (INT_PTR)TRUE;
+                }
+
+                // reassemble filename as .raw file
+                err = _wmakepath_s(RawFilename, _MAX_PATH, Drive, Dir, L"diagnostic", L".raw");
+                if (err != 0) {
+                    delete[]InputImage;
+                    MessageBox(hDlg, L"Could not create diagnostic output filename", L"Send ASIS message", MB_OK);
+                    return (INT_PTR)TRUE;
+                }
+                iRes = SaveImageFile(hDlg, InputImage, RawFilename, &ImageHeader);
+
+                // reassemble filename as .bmp file
+                err = _wmakepath_s(BMPFilename, _MAX_PATH, Drive, Dir, L"diagnostic", L".bmp");
+                if (err != 0) {
+                    delete[]InputImage;
+                   MessageBox(hDlg, L"Could not create output filename", L"Send ASIS message", MB_OK);
+                    return (INT_PTR)TRUE;
+                }
+
+                iRes = SaveBMP(BMPFilename, RawFilename, FALSE, TRUE);
+                if (iRes == APP_SUCCESS) {
+                    iRes = GetPrivateProfileInt(L"SettingsGlobalDlg", L"AutoPNG", 1, (LPCTSTR)strAppNameINI);
+                    if (iRes != 0) {
+                        SaveBMP2PNG(BMPFilename);
+                    }
+                }
+
+            }
+            */
+
             // Save Image to bitstream
             BYTE* MessageBody=nullptr;
             int BitCount;
-            iRes = ConvertImage2Bitstream(InputImage, &ImageHeader, &MessageBody, 8192, FALSE, &BitCount);
+            iRes = ConvertImage2Bitstream(InputImage, &ImageHeader, &MessageBody, 8192, &BitCount);
             if (iRes != APP_SUCCESS) {
                 delete[] InputImage;
                 return (INT_PTR)TRUE;

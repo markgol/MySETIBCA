@@ -43,6 +43,8 @@
 //                              ConvertImage2Bitstream()
 //                              CollapseImageFrames() (moved here from CADialogs.cpp)
 //                              BinarizeImage()
+// V1.1.1   2024-07-01  Corrected bug that locked rule file with program was running
+// V1.1.2   2024-07-08  Added CountBitInImage()
 //
 //  This contains the Margolus block cellular functions
 //  This will get converted to a c++ class
@@ -58,6 +60,8 @@
 #include <wchar.h>
 #include <atlstr.h>
 #include <strsafe.h>
+#include <cmath>
+#include <vector>
 #include "AppErrors.h"
 #include "ImageDialog.h"
 #include "Globals.h"
@@ -65,7 +69,7 @@
 #include "FileFunctions.h"
 #include "CA.h"
 
-// THese are the state globals that start, stop and track processing
+// These are the state globals that start, stop and track processing
 
 // BCArunning == 0  && StopRunning == TRUE
 //  no processing is running
@@ -120,6 +124,7 @@ IMAGINGHEADER BCAimageHeader;
 //  int Xsize                   y size of image
 //  int Ysize                   y size of image
 //  int* Rules                  list of the 16 block substituion rules
+//  int* Histo                  count of 0,1,2,3,4 #pixel set in 2x2 bloock
 // 
 //  return value:
 //  1 - Success
@@ -127,7 +132,7 @@ IMAGINGHEADER BCAimageHeader;
 //
 //*******************************************************************************
 void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
-    int* Rules)
+    int* Rules, int* Histo)
 {
     int Length = Xsize * Ysize / 4; // number of 2x2 blocks in image
     int Cell = 0;
@@ -195,6 +200,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 0;
             TheImage[(yp1 * Xsize) + x] = 0;
             TheImage[(yp1 * Xsize) + xp1] = 0;
+            Histo[0]++;
             break;
 
         case 1:
@@ -202,6 +208,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 0;
             TheImage[(yp1 * Xsize) + x] = 0;
             TheImage[(yp1 * Xsize) + xp1] = 0;
+            Histo[1]++;
             break;
 
         case 2:
@@ -209,6 +216,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 255;
             TheImage[(yp1 * Xsize) + x] = 0;
             TheImage[(yp1 * Xsize) + xp1] = 0;
+            Histo[1]++;
             break;
 
         case 3:
@@ -216,6 +224,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 255;
             TheImage[(yp1 * Xsize) + x] = 0;
             TheImage[(yp1 * Xsize) + xp1] = 0;
+            Histo[2]++;
             break;
 
         case 4:
@@ -223,6 +232,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 0;
             TheImage[(yp1 * Xsize) + x] = 255;
             TheImage[(yp1 * Xsize) + xp1] = 0;
+            Histo[1]++;
             break;
 
         case 5:
@@ -230,6 +240,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 0;
             TheImage[(yp1 * Xsize) + x] = 255;
             TheImage[(yp1 * Xsize) + xp1] = 0;
+            Histo[2]++;
             break;
 
         case 6:
@@ -237,6 +248,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 255;
             TheImage[(yp1 * Xsize) + x] = 255;
             TheImage[(yp1 * Xsize) + xp1] = 0;
+            Histo[2]++;
             break;
 
         case 7:
@@ -244,6 +256,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 255;
             TheImage[(yp1 * Xsize) + x] = 255;
             TheImage[(yp1 * Xsize) + xp1] = 0;
+            Histo[3]++;
             break;
 
         case 8:
@@ -251,6 +264,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 0;
             TheImage[(yp1 * Xsize) + x] = 0;
             TheImage[(yp1 * Xsize) + xp1] = 255;
+            Histo[1]++;
             break;
 
         case 9:
@@ -258,6 +272,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 0;
             TheImage[(yp1 * Xsize) + x] = 0;
             TheImage[(yp1 * Xsize) + xp1] = 255;
+            Histo[2]++;
             break;
 
         case 10:
@@ -265,6 +280,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 255;
             TheImage[(yp1 * Xsize) + x] = 0;
             TheImage[(yp1 * Xsize) + xp1] = 255;
+            Histo[2]++;
             break;
 
         case 11:
@@ -272,6 +288,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 255;
             TheImage[(yp1 * Xsize) + x] = 0;
             TheImage[(yp1 * Xsize) + xp1] = 255;
+            Histo[3]++;
             break;
 
         case 12:
@@ -279,6 +296,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 0;
             TheImage[(yp1 * Xsize) + x] = 255;
             TheImage[(yp1 * Xsize) + xp1] = 255;
+            Histo[2]++;
             break;
 
         case 13:
@@ -286,6 +304,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 0;
             TheImage[(yp1 * Xsize) + x] = 255;
             TheImage[(yp1 * Xsize) + xp1] = 255;
+            Histo[3]++;
             break;
 
         case 14:
@@ -293,6 +312,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 255;
             TheImage[(yp1 * Xsize) + x] = 255;
             TheImage[(yp1 * Xsize) + xp1] = 255;
+            Histo[3]++; 
             break;
 
         case 15:
@@ -300,6 +320,7 @@ void MargolusBCAp1p1(BOOL EvenStep, int* TheImage, int Xsize, int Ysize,
             TheImage[(y * Xsize) + xp1] = 255;
             TheImage[(yp1 * Xsize) + x] = 255;
             TheImage[(yp1 * Xsize) + xp1] = 255;
+            Histo[4]++;
             break;
         }
 
@@ -355,7 +376,7 @@ int ReadRulesFile(HWND hDlg, WCHAR* InputFile, int* Rules)
             return APPERR_PARAMETER;
         }
     }
-
+    fclose(TextIn);
     return APP_SUCCESS;
 }
 
@@ -649,7 +670,7 @@ int BitSequences(BYTE *ByteList, int* BitCountList, int MaxBytes, BOOL BitOrder)
 //
 //*******************************************************************
 int ConvertImage2Bitstream(int* InputImage, IMAGINGHEADER* ImageHeader,
-    BYTE **MessageBody, int MessageLength, BOOL BitOrder, int* BitCount)
+    BYTE **MessageBody, int MessageLength, int* BitCount)
 {
     if ((ImageHeader->Xsize * ImageHeader->Ysize / 8) != MessageLength) {
         *MessageBody = nullptr;
@@ -672,14 +693,8 @@ int ConvertImage2Bitstream(int* InputImage, IMAGINGHEADER* ImageHeader,
         CurrentByte = 0;
         for (int j = 0; j < 8; j++) {
             if (InputImage[ImageIndex] != 0) {
-                if (BitOrder == 0) {
                     Count++;
                     CurrentByte = CurrentByte | (0x80 >> j);
-                }
-                else {
-                    Count++;
-                    CurrentByte = CurrentByte | (0x01 << j);
-                }
             }
             ImageIndex++;
         }
@@ -754,6 +769,77 @@ void BinarizeImage(int* TheImage, IMAGINGHEADER* BCAimageHeader, int Threshold)
         }
     }
     return;
+}
+
+//*******************************************************************************
+//
+// BinarizeImage
+// 
+// This is to binarize image from single frame
+// Use Threshold to binarize
+// 
+// int* TheImage
+// IMAGINGHEADER* BCAimageHeader
+// 
+// return parameter
+// 
+//  -1  Error can not count bits in image reasons could be:
+//          There is no image
+//          # frames > 1
+// 
+//  0 to Xsize*Ysize, # of non zero pixels
+//          
+//*******************************************************************************
+int CountBitInImage(int* Image, IMAGINGHEADER* ImageHeader)
+{
+    int Count = 0;
+    if (Image==nullptr || ImageHeader->NumFrames > 1) {
+        return -1;
+    }
+    for (int i = 0; i < (ImageHeader->Xsize * ImageHeader->Ysize * ImageHeader->NumFrames); i++) {
+        if (Image[i] > 0) {
+            Count++;
+        }
+    }
+
+    return Count;
+}
+
+//***************************************************************
+//
+// These functions were generated by chatgpt
+// 
+// Function to find all combinations of factors that multiply to a given number
+//      findFactors()
+// Function to generate all factor combinations
+//      factorCombinations()
+//***************************************************************
+// Function to find all combinations of factors that multiply to a given number
+void findFactors(int num, int start, std::vector<int>& current, std::vector<std::vector<int>>& result) {
+    // Base case: if num becomes 1, we have found a valid combination
+    if (num == 1) {
+        if (!current.empty()) {
+            result.push_back(current);
+        }
+        return;
+    }
+
+    // Start from the last factor added to avoid duplicates
+    for (int i = start; i <= num; ++i) {
+        if (num % i == 0) {
+            current.push_back(i);
+            findFactors(num / i, i, current, result);
+            current.pop_back(); // backtrack
+        }
+    }
+}
+
+// Function to generate all factor combinations
+std::vector<std::vector<int>> factorCombinations(int num) {
+    std::vector<std::vector<int>> result;
+    std::vector<int> current;
+    findFactors(num, 2, current, result); // start with 2 to avoid including 1 in the combinations
+    return result;
 }
 
 

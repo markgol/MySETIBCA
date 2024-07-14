@@ -21,6 +21,7 @@
 // 
 // V1.0.0	2024-06-21	Initial release
 // V1.1.0	2024-06-28	Corrected loading of BMP files
+// V1.1.2	2024-07-08	added LayerBits, # bits in image
 //
 //  This module is a copy of the Layers module used in MySETIviewer and customized
 //  for this application
@@ -154,10 +155,15 @@ int Layers::AddLayer(WCHAR* Filename) {
 		BinarizeImage(Image, &ImageHeader, UseThisThreshold);
 	}
 
+	// update bit count
+	int Count = CountBitInImage(Image, &ImageHeader);
+
 	// save results in Layers class variables
 	LayerImage[NumLayers] = Image;
 	LayerXsize[NumLayers] = ImageHeader.Xsize;
 	LayerYsize[NumLayers] = ImageHeader.Ysize;
+
+	LayerBits[NumLayers] = Count;
 
 	WCHAR* FileAdded;
 	FileAdded = new WCHAR[MAX_PATH];
@@ -1042,3 +1048,12 @@ void Layers::SetYdir(int ydir)
 	yposDir = ydir;
 }
 
+//*******************************************************************************
+//
+//  int GetBits()
+// 
+//*******************************************************************************
+int Layers::GetBits(int Layer)
+{
+	return LayerBits[Layer];
+}

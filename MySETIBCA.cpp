@@ -100,6 +100,18 @@
 //                      Automatically save of BMP and (optionally) PNG file when image file is saved
 //                      Corrected handling of BMP files
 //                      Corrected potential memory leak on WM_DESTROY
+// V1.1.2   2024-07-10  Changed default size of display to be 256x256, save/restore user settings
+//                      Added histogram of # bits set in 2x2 block for image
+//                      Added current non zero bit count to BCA dialog
+//                      Send ASIS message dialog saves the number of iterations as default for next time
+//                      Allow override of iterations specfied in the Receive ASIS message
+//                      Allow generation of footer based on # iterations selected rather than use a file
+//                      Correction, Enable Grid should have initialized to disabled.
+//                      Correction, filename extension  for send message corrected to default of .bin
+//                      Correction, removed bit order flag from bitstream conversion, we already know ASIS bit order
+//                      Correction, default filename for footer was the header file
+//                      Correction, Receive ASIS message starting EvenStep = FALSE when # of iterations is even
+//                      Correction, Enable Grid had inconsistencies
 // 
 //  This appliction stores user parameters in a Windows style .ini file
 //  The MySETIBCA.ini file must be in the same directory as the exectable
@@ -424,7 +436,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    ValueY = GetPrivateProfileInt(L"SettingsDisplayDlg", L"GapYminor", 1, (LPCTSTR)strAppNameINI);
    Displays->SetGapMinor(ValueX, ValueY);
 
-   int Enable = GetPrivateProfileInt(L"SettingsDisplayDlg", L"EnableGrid", 1, (LPCTSTR)strAppNameINI);
+   int Enable = GetPrivateProfileInt(L"SettingsDisplayDlg", L"EnableGrid", 0, (LPCTSTR)strAppNameINI);
    Displays->EnableGrid(Enable);
 
    // These are Layer class settings
@@ -436,6 +448,12 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    ImageLayers->SetOverlayColor(Color);
    Color = (COLORREF)GetPrivateProfileInt(L"LayersDlg", L"DefaultLayerColor", 16777215, (LPCTSTR)strAppNameINI);
    ImageLayers->SetDefaultLayerColor(Color);
+
+   // restore default MinOverlaySize
+   int x, y;
+   x = GetPrivateProfileInt(L"SettingsDlg", L"MinOverlaySizeX", 256, (LPCTSTR)strAppNameINI);
+   y = GetPrivateProfileInt(L"SettingsDlg", L"MinOverlaySizeY", 256, (LPCTSTR)strAppNameINI);
+   ImageLayers->SetMinOverlaySize(x, y);
 
    // add reserved layer 0;
    ImageLayers->AddLayer(NULL);

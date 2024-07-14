@@ -21,9 +21,8 @@
 // This class handles the conifguration data and image memory
 // used in creating multiple image overlays for display
 // 
-// V1.0.1	2023-12-20	Initial release
-// V1.0.2   2023-12-20  Added Y direction flag for which direction to move image
-// V1.1.3   2024-21-03  Increased max number of layers to 20
+//	V1.0.0	2024-06-21	Initial release, used Layers.h from MySETIviewer V1.1.3
+//	V1.1.2	2024-07-10	Corrected initial of class, EnableGrid should have been disabled
 //
 #include "framework.h"
 
@@ -35,6 +34,7 @@ private:
 	int* LayerImage[MAX_LAYERS] = { NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL };
 	int LayerXsize[MAX_LAYERS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 	int LayerYsize[MAX_LAYERS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+	int LayerBits[MAX_LAYERS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 	COLORREF LayerColor[MAX_LAYERS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 }; // color to use for layer when pixel != 0
 	int LayerX[MAX_LAYERS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 	int LayerY[MAX_LAYERS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
@@ -51,8 +51,8 @@ private:
 	int ImageYextent = 0;
 	int Xextent0 = 0;
 	int Yextent0 = 0;
-	int minOverlaySizeX = 512;
-	int minOverlaySizeY = 512;
+	int minOverlaySizeX = 256;
+	int minOverlaySizeY = 256;
 	int yposDir = 0;
 
 public:
@@ -86,6 +86,7 @@ public:
 	int GetNumLayers(void);
 	int SetCurrentLayer(int LayerNumber);
 	int GetCurrentLayer(void);
+	int GetBits(int Layer);
 
 	int GetSize(int Layer, int* x, int* y);
 	int GetLocation(int Layer, int* x, int* y);
