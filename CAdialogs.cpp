@@ -1454,21 +1454,23 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
             std::vector<std::vector<int>> combinations;
 
             if (UseIterations) {
-                combinations = factorCombinations(NumSteps);
+                if (NumSteps != 0) {
+                    combinations = factorCombinations(NumSteps);
 
-                // only need to look at first combination
-                int NumBits = 0;
-                auto& combination = combinations[0];
-                for (int factor : combination) {
-                    NumBits += factor;
-                }
+                    // only need to look at first combination
+                    int NumBits = 0;
+                    auto& combination = combinations[0];
+                    for (int factor : combination) {
+                        NumBits += factor;
+                    }
 
-                if (NumBits > 79) {
-                    // Clear the combinations vector before reusing it
-                    combinations.clear();
-                    MessageBox(hDlg, L"# iterations can NOT be encoded into unary formatted footer\nChoose a different number of iterations",
-                        L"Unary number exceeds 79 bits", MB_OK);
-                    return (INT_PTR)TRUE;
+                    if (NumBits > 79) {
+                        // Clear the combinations vector before reusing it
+                        combinations.clear();
+                        MessageBox(hDlg, L"# iterations can NOT be encoded into unary formatted footer\nChoose a different number of iterations",
+                            L"Unary number exceeds 79 bits", MB_OK);
+                        return (INT_PTR)TRUE;
+                    }
                 }
             }
 
@@ -1548,49 +1550,52 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
                 WritePrivateProfileString(L"SendASISdlg", L"TextInput2", szString, (LPCTSTR)strAppNameINI);
             }
             else {
-                // create footer from factors combination list
-                BYTE CurrentByte = 0;
-                int CurrentBit = 0;
-                BOOL OddBit = TRUE;
-                auto& combination = combinations[0];
+                if (NumSteps != 0) {
+                    // create footer from factors combination list
+                    BYTE CurrentByte = 0;
+                    int CurrentBit = 0;
+                    BOOL OddBit = TRUE;
+                    auto& combination = combinations[0];
 
-                for (int factor : combination) {
-                    // set factor number of bits
-                    for (int i = 0; i < factor; i++) {
-                        if (OddBit) {
-                            // set to ones
-                            Footer[CurrentByte] = Footer[CurrentByte] | (0x80 >> CurrentBit);
-                        }
-                        // the footer is initillay already all zeros so no need to set those
-                        CurrentBit++;
-                        if (CurrentBit >= 8) {
-                            CurrentBit = 0;
-                            CurrentByte++;
-                            if (CurrentByte >= 10) {
-                                // things are broken, this should never happens
-                                combinations.clear();
-                                delete[] InputImage;
-                                MessageBox(hDlg, L"Program failure generating footer\nfrom iterations specified",
-                                    L"Array boundary error", MB_OK);
-                                return (INT_PTR)TRUE;
+                    for (int factor : combination) {
+                        // set factor number of bits
+                        for (int i = 0; i < factor; i++) {
+                            if (OddBit) {
+                                // set to ones
+                                Footer[CurrentByte] = Footer[CurrentByte] | (0x80 >> CurrentBit);
+                            }
+                            // the footer is initillay already all zeros so no need to set those
+                            CurrentBit++;
+                            if (CurrentBit >= 8) {
+                                CurrentBit = 0;
+                                CurrentByte++;
+                                if (CurrentByte >= 10) {
+                                    // things are broken, this should never happens
+                                    combinations.clear();
+                                    delete[] InputImage;
+                                    MessageBox(hDlg, L"Program failure generating footer\nfrom iterations specified",
+                                        L"Array boundary error", MB_OK);
+                                    return (INT_PTR)TRUE;
+                                }
                             }
                         }
+                        OddBit = !OddBit;
                     }
-                    OddBit = !OddBit;
-                }
-                if (OddBit) {
-                    // fill out rest of bits with 1s out to 80
-                    if (CurrentBit != 0) {
-                        for (int i = CurrentBit; i < 8; i++) {
-                            Footer[CurrentByte] = Footer[CurrentByte] | (0x80 >> i);
+                    if (OddBit) {
+                        // fill out rest of bits with 1s out to 80
+                        if (CurrentBit != 0) {
+                            for (int i = CurrentBit; i < 8; i++) {
+                                Footer[CurrentByte] = Footer[CurrentByte] | (0x80 >> i);
+                            }
+                            CurrentByte++;
                         }
-                        CurrentByte++;
-                    }
-                    for (int i = CurrentByte; i < 10; i++) {
-                        Footer[CurrentByte] = 0xff;
+                        for (int i = CurrentByte; i < 10; i++) {
+                            Footer[CurrentByte] = 0xff;
+                        }
                     }
                 }
                 // no need to zero fill, already done at initialization
+                // this also works for 0 iterations
             }
             
             if (UseIterations) {

@@ -45,6 +45,7 @@
 //                              BinarizeImage()
 // V1.1.1   2024-07-01  Corrected bug that locked rule file with program was running
 // V1.1.2   2024-07-08  Added CountBitInImage()
+// V1.1.3   2024-07-18  Correction, allow 0 iterations for ASIS message
 //
 //  This contains the Margolus block cellular functions
 //  This will get converted to a c++ class
@@ -480,11 +481,18 @@ int ReadASISmessage(WCHAR *Filename, IMAGINGHEADER* ImageHeader, int** NewImage,
         *NewImage = NULL;
         return APPERR_PARAMETER;
     }
-    // mulitply the length all sequences but the last
-    // use this as the BCAiterations required
-    *BCAiterations = 1;
-    for (int i = 0; i < (NumSequences - 1); i++) {
-        *BCAiterations *= BitCountList[i];
+
+    if (NumSequences <= 1 ) {
+        // do not run the BCA
+        *BCAiterations = 0;
+    }
+    else {
+        // mulitply the length all sequences but the last
+        // use this as the BCAiterations required
+        *BCAiterations = 1;
+        for (int i = 0; i < (NumSequences - 1); i++) {
+            *BCAiterations *= BitCountList[i];
+        }
     }
 
     // Allocae the new image array

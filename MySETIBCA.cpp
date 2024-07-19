@@ -112,6 +112,7 @@
 //                      Correction, default filename for footer was the header file
 //                      Correction, Receive ASIS message starting EvenStep = FALSE when # of iterations is even
 //                      Correction, Enable Grid had inconsistencies
+// V1.1.3   20204-07-18 Correction, Allow 0 iterations in ASIS message both receive and send
 // 
 //  This appliction stores user parameters in a Windows style .ini file
 //  The MySETIBCA.ini file must be in the same directory as the exectable
