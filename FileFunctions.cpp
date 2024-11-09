@@ -29,6 +29,11 @@
 //                          ReadBMPfile() is corrected function
 //                          deleted LoadBMPfile()
 // V1.1.2   2024-07-06  Added SaveHistogramData()
+// V1.1.5   2024-11-08  Added SaveSnapshot()
+//                      Changed index number to have leading zero, with 8 significant digits
+//                          like 00000001,00000002,...
+//                          This solves the alphabetical sorting issues for sorts that don't
+//                          understand numbers in the their filename
 // 
 //  This module is a copy of the FileFunctions module used in MySETIviewer and customized
 //  for this application
@@ -2103,5 +2108,65 @@ int SaveHistogramData(WCHAR* Filename, BOOL CreateNew, int Index, int* Histogram
 
     fclose(Out);
 
+    return APP_SUCCESS;
+}
+
+//*******************************************************************
+//
+// SaveSnapShot
+// 
+// Save snapshot of current iteration
+// 
+//*******************************************************************
+int SaveSnapshot(HWND hDlg, int CurrentIteration, int* TheImage, IMAGINGHEADER* BCAimageHeader)
+{
+    // save current image using output name + iteration number
+    WCHAR OutputFilename[MAX_PATH];
+    WCHAR NewFilename[MAX_PATH];
+
+    int err;
+    WCHAR Drive[_MAX_DRIVE];
+    WCHAR Dir[_MAX_DIR];
+    WCHAR Fname[_MAX_FNAME];
+    WCHAR Ext[_MAX_EXT];
+
+    GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, OutputFilename, MAX_PATH);
+
+    // split apart original filename
+    err = _wsplitpath_s(OutputFilename, Drive, _MAX_DRIVE, Dir, _MAX_DIR, Fname,
+        _MAX_FNAME, Ext, _MAX_EXT);
+    if (err != 0) {
+        MessageBox(hDlg, L"Could not creat output filename", L"BCA save image", MB_OK);
+        return APPERR_FILEOPEN;
+    }
+    // change the fname portion to add _kernel# 1 based
+    // use Kernel+1
+    WCHAR NewFname[_MAX_FNAME];
+
+    swprintf_s(NewFname, _MAX_FNAME, L"%s_%08d", Fname, CurrentIteration);
+
+    // reassemble filename
+    err = _wmakepath_s(NewFilename, _MAX_PATH, Drive, Dir, NewFname, Ext);
+    if (err != 0) {
+        MessageBox(hDlg, L"Could not creat output filename", L"BCA save image", MB_OK);
+        return APPERR_FILEOPEN;
+    }
+
+    int iRes;
+    iRes = SaveImageFile(hDlg, TheImage, NewFilename, BCAimageHeader);
+    if (iRes == APP_SUCCESS && IsDlgButtonChecked(hDlg, IDC_BMP_FILE) == BST_CHECKED) {
+        // reassemble filename
+        WCHAR BMPFilename[MAX_PATH];
+        err = _wmakepath_s(BMPFilename, _MAX_PATH, Drive, Dir, NewFname, L".bmp");
+        if (err == 0) {
+            iRes = SaveBMP(BMPFilename, NewFilename, FALSE, TRUE);
+            if (iRes == APP_SUCCESS) {
+                iRes = GetPrivateProfileInt(L"SettingsGlobalDlg", L"AutoPNG", 1, (LPCTSTR)strAppNameINI);
+                if (iRes != 0) {
+                    SaveBMP2PNG(BMPFilename);
+                }
+            }
+        }
+    }
     return APP_SUCCESS;
 }

@@ -133,7 +133,8 @@
 #define IDC_BMP_FILE                    1240
 #define IDC_THRESHOLD                   1241
 #define IDC_HISTO_FILE                  1242
-#define IDC_CHECK1                      1246
+#define IDC_BMP_FILE2                   1243
+#define IDC_SAVE_STEP                   1243
 #define IDC_USE_STEPS                   1246
 #define IDC_TEXT_INPUT1                 1310
 #define IDC_TEXT_INPUT1_BROWSE          1311

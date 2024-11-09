@@ -112,7 +112,17 @@
 //                      Correction, default filename for footer was the header file
 //                      Correction, Receive ASIS message starting EvenStep = FALSE when # of iterations is even
 //                      Correction, Enable Grid had inconsistencies
-// V1.1.3   20204-07-18 Correction, Allow 0 iterations in ASIS message both receive and send
+// V1.1.3   2024-07-18  Correction, Allow 0 iterations in ASIS message both receive and send
+// V1.1.4   2024-07-20  Release only updated amino acids symbol libraries only, no program changes
+// V1.1.5   2024-11-08  Added save snapshot to each iteration. 
+//                      Changed index number to have leading zero, with 8 significant digits
+//                          like 00000001,00000002,...
+//                          This solves the alphabetical sorting issues for sorts that don't
+//                          understand numbers in the their filename
+//                      Updated the sumbol library and 'Library key.txt' file
+//                          Added the notatoin rules used in building the AAs molecules
+//                          Corrected an error in the the ASIS 'C' symbol in the library.
+//                              The image was clipped when it was copied.
 // 
 //  This appliction stores user parameters in a Windows style .ini file
 //  The MySETIBCA.ini file must be in the same directory as the exectable

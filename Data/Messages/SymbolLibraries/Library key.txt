@@ -2,8 +2,6 @@ The symbol library has 2 directories; us and et
 The 'us' directory has the amino acid image files using the 22 amino acids we are familiar with
 The 'et' directory has the amino acid image files using the 5 amino acids that were sent in the message.
 
-The insertion handle for all images is 6,12.  This is zero based.  This is position of the upper left nitrogen symbol in the image.
-
 Filename format
 a b.ttt
 
@@ -21,24 +19,24 @@ a b	symbol name plus the set designator (ours or ET's) represent different amino
 	a	b (us)
 		3 leter	Amino acid name		# of bits used
 	A	Ala	Alanine			87
-	R	Arg	Arginine		172
+	R	Arg	Arginine		173
 	N	Asn	Asparagine		124
-	D	Asp	Aspartate		118
+	D	Asp	Aspartate		116
 	C	Cys	Cysteine		106
 	Q	Gln	Glutamine		142
 	E	Glu	Glutamate		138
-	G	Gly	Glycine			74
-	H	His	Histidine		145
+	G	Gly	Glycine			70
+	H	His	Histidine		147
 	I	Ile	Isoleucine		138
 	L	Leu	Leucine			139
-	K	Lys	Lysine			153
+	K	Lys	Lysine			152
 	M	Met	Methionine		141
 	F	Phe	Phenylalanine		162
-	P	Pro	Proline			
+	P	Pro	Proline			133
 	S	Ser	Serine			98
 	T	Thr	Threonine		115
-	W	Trp	Tryptophan		
-	Y	Tyr	Tyrosine		
+	W	Trp	Tryptophan		207
+	Y	Tyr	Tyrosine		189
 	V	Val	Valine			121
 	U	Sec	Selenocysteine		120
 	O	Pyl	Pyrrolysine		264
@@ -51,3 +49,19 @@ a b	symbol name plus the set designator (ours or ET's) represent different amino
 	D		L-Aspartic acid, 3-methyl-,(3R)-	138
 			or 2-Amino-3-methylsuccinic acid 	
 	E		Norvaline				121
+
+
+
+The rules for drawing a amino acid in the ASIS format:
+
+Atom rules:
+1.) The number of pixel in a block represents the atomic number for the atom.
+2.) The block can not be more than 3 pixels wide.
+3.) An incomplete row is always at the bottom of the block.
+4.) An incomplete row is always left justified.
+
+Bond Rules:
+1. Bond require 3 connected pixels and only 3.  This does cover all the diagonal, horizontal, vertical and caret bonds.
+2. Double bond has 2 of the three pixel bonds in parallel.
+3. The gap between the connection molecules can only be one pixel.
+4. A caret bond can have a 2 pixel gap to the connecting atom but only on one side.

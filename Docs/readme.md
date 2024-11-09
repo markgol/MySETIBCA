@@ -1,3 +1,5 @@
+Read the 'Quick start guide for MySETIBCA.pdf' for more information
+
 Download and run the installer on a Windows computer.
 Use all the defaults.
 

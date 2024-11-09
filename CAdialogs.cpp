@@ -47,6 +47,7 @@
 //                      Correction, filename extension  for send message corrected to default of .bin
 //                      Correction, default filename for footer was the header file
 //                      Correction, Receive ASIS message starting EvenStep = FALSE when # of iterations is even
+// V1.1.5  2024-11-08  Added save snapshot to each iteration.
 // 
 // Cellular Automata tools dialog box handlers
 // 
@@ -324,6 +325,7 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             int NumberSteps;
             int Histo[5] = { 0,0,0,0,0 };
             BOOL HistoFileSave = FALSE;
+            BOOL SaveStep = FALSE;
 
             if (!BCAimageLoaded) {
                 // This really shouldn't ever get here but just in case
@@ -357,6 +359,10 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 HistoFileSave = TRUE;
             }
 
+            if (IsDlgButtonChecked(hDlg, IDC_SAVE_STEP) == BST_CHECKED) {
+                SaveStep = TRUE;
+            }
+
             for (int i = 0; i < NumberSteps; i++) {
                 // step backward on iteration
                 EvenStep = !EvenStep;
@@ -375,7 +381,12 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                     SaveHistogramData(Filename, NewHistoFile, CurrentIteration, Histo, 5);
                     NewHistoFile = FALSE;
                 }
+
                 if (CurrentIteration <= BackwardLimit) break;
+            }
+
+            if (SaveStep) {
+                SaveSnapshot(hDlg, CurrentIteration, TheImage, &BCAimageHeader);
             }
 
             // update bit count
@@ -412,6 +423,7 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             int ForwardLimit;
             int Histo[5] = { 0,0,0,0,0 };
             BOOL HistoFileSave = FALSE;
+            BOOL SaveStep = FALSE;
 
             if (!BCAimageLoaded) {
                 // This really shouldn't ever get here but just in case
@@ -445,6 +457,10 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 HistoFileSave = TRUE;
             }
 
+            if (IsDlgButtonChecked(hDlg, IDC_SAVE_STEP) == BST_CHECKED) {
+                SaveStep = TRUE;
+            }
+
             for (int i = 0; i < NumberSteps; i++) {
                 Histo[0] = 0;
                 Histo[1] = 0;
@@ -467,6 +483,10 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
                 EvenStep = !EvenStep;
                 if (CurrentIteration >= ForwardLimit) break;
+            }
+
+            if (SaveStep) {
+                SaveSnapshot(hDlg, CurrentIteration, TheImage, &BCAimageHeader);
             }
 
             // update bit count
@@ -770,53 +790,7 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         {
             if (BCAimageLoaded) {
                 // save current image using output name + iteration number
-                WCHAR OutputFilename[MAX_PATH];
-                WCHAR NewFilename[MAX_PATH];
-
-                int err;
-                WCHAR Drive[_MAX_DRIVE];
-                WCHAR Dir[_MAX_DIR];
-                WCHAR Fname[_MAX_FNAME];
-                WCHAR Ext[_MAX_EXT];
-
-                GetDlgItemText(hDlg, IDC_IMAGE_OUTPUT, OutputFilename, MAX_PATH);
-
-                // split apart original filename
-                err = _wsplitpath_s(OutputFilename, Drive, _MAX_DRIVE, Dir, _MAX_DIR, Fname,
-                    _MAX_FNAME, Ext, _MAX_EXT);
-                if (err != 0) {
-                    MessageBox(hDlg, L"Could not creat output filename", L"BCA save image", MB_OK);
-                    return APPERR_FILEOPEN;
-                }
-                // change the fname portion to add _kernel# 1 based
-                // use Kernel+1
-                WCHAR NewFname[_MAX_FNAME];
-
-                swprintf_s(NewFname, _MAX_FNAME, L"%s_%d", Fname, CurrentIteration);
-
-                // reassemble filename
-                err = _wmakepath_s(NewFilename, _MAX_PATH, Drive, Dir, NewFname, Ext);
-                if (err != 0) {
-                    MessageBox(hDlg, L"Could not creat output filename", L"BCA save image", MB_OK);
-                    return APPERR_FILEOPEN;
-                }
-
-                int iRes;
-                iRes = SaveImageFile(hDlg, TheImage, NewFilename, &BCAimageHeader);
-                if (iRes==APP_SUCCESS && IsDlgButtonChecked(hDlg, IDC_BMP_FILE) == BST_CHECKED) {
-                    // reassemble filename
-                    WCHAR BMPFilename[MAX_PATH];
-                    err = _wmakepath_s(BMPFilename, _MAX_PATH, Drive, Dir, NewFname, L".bmp");
-                    if (err == 0) {
-                        iRes = SaveBMP(BMPFilename, NewFilename, FALSE, TRUE);
-                        if (iRes == APP_SUCCESS) {
-                            iRes = GetPrivateProfileInt(L"SettingsGlobalDlg", L"AutoPNG", 1, (LPCTSTR)strAppNameINI);
-                            if (iRes != 0) {
-                                SaveBMP2PNG(BMPFilename);
-                            }
-                        }
-                    }
-                }
+                SaveSnapshot(hDlg, CurrentIteration, TheImage, &BCAimageHeader);
             }
             return (INT_PTR)TRUE;
         }
@@ -903,6 +877,8 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 WritePrivateProfileString(L"MargolusBCADlg", L"HistoFileSave", L"0", (LPCTSTR)strAppNameINI);
             }
 
+            CheckDlgButton(hDlg, IDC_SAVE_STEP, BST_UNCHECKED);
+
             {
                 // save window position/size data
                 CString csString = L"MargolusBCAwindow";
@@ -913,6 +889,8 @@ INT_PTR CALLBACK MargolusBCADlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         }
         case IDCANCEL:
         {
+            CheckDlgButton(hDlg, IDC_SAVE_STEP, BST_UNCHECKED);
+
             ShowWindow(hDlg, SW_HIDE);
             return (INT_PTR)TRUE;
         }
