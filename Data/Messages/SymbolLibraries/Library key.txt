@@ -55,7 +55,7 @@ a b	symbol name plus the set designator (ours or ET's) represent different amino
 The rules for drawing a amino acid in the ASIS format:
 
 Atom rules:
-1.) The number of pixel in a block represents the atomic number for the atom.
+1.) The number of pixel(s) in a block represents the atomic number for the atom.
 2.) The block can not be more than 3 pixels wide.
 3.) An incomplete row is always at the bottom of the block.
 4.) An incomplete row is always left justified.
@@ -63,5 +63,5 @@ Atom rules:
 Bond Rules:
 1. Bond require 3 connected pixels and only 3.  This does cover all the diagonal, horizontal, vertical and caret bonds.
 2. Double bond has 2 of the three pixel bonds in parallel.
-3. The gap between the connection molecules can only be one pixel.
+3. The gap between the connecting atom can only be one pixel except for next rule.
 4. A caret bond can have a 2 pixel gap to the connecting atom but only on one side.

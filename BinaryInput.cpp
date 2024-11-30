@@ -19,6 +19,7 @@
 // If not, see < https://www.gnu.org/licenses/>.
 // 
 // V1.0.0	2024-06-21	Initial release
+// V1.1.6   2024-11-25  Correction for EOF processing in ConvertText2BitStream()
 //
 // This contains the import bitstream dialog and support functions
 // to read a binary bitstream like the data17.bin file form 'A Sign in Space'
@@ -759,9 +760,10 @@ int ConvertText2BitStream(HWND hDlg, WCHAR* InputFile, WCHAR* OutputFile, int Bi
     while (!feof(In)) {
         iRes = fscanf_s(In, "%d", &BitValue);
         if (iRes != 1) {
-            fclose(Out);
-            fclose(In);
-            return -3;
+            // This is also a likely EOF condition
+            // so treat this error as if it is an EOF
+            // it could also be caused by text in the input file as oppsed to a number
+            break;
         }
         if (BitValue < 0) {
             fclose(Out);

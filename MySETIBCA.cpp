@@ -123,6 +123,7 @@
 //                          Added the notatoin rules used in building the AAs molecules
 //                          Corrected an error in the the ASIS 'C' symbol in the library.
 //                              The image was clipped when it was copied.
+// V1.1.6   2024-11-25  Correction for EOF processing in reading text files and expecting an integer input
 // 
 //  This appliction stores user parameters in a Windows style .ini file
 //  The MySETIBCA.ini file must be in the same directory as the exectable
