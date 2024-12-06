@@ -47,7 +47,10 @@
 //                      Correction, filename extension  for send message corrected to default of .bin
 //                      Correction, default filename for footer was the header file
 //                      Correction, Receive ASIS message starting EvenStep = FALSE when # of iterations is even
-// V1.1.5  2024-11-08  Added save snapshot to each iteration.
+// V1.1.5  2024-11-08   Added save snapshot to each iteration.
+// V1.1.7  2024-12-05   Added Unary sequence dialog
+//                      Records possible unary sequences of factors for possible iterations for the BCA which have
+//                      a specific last unary value in a fixed bit string length.
 // 
 // Cellular Automata tools dialog box handlers
 // 
@@ -1682,6 +1685,188 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
             MessageBox(hDlg, NewMessage, L"Send ASIS message", MB_OK);
 
             EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+
+        case IDCANCEL:
+        {
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+
+        }
+    }
+
+    return (INT_PTR)FALSE;
+}
+
+//*******************************************************************************
+//
+// Message handler for SendASISdlg dialog box.
+// 
+//*******************************************************************************
+INT_PTR CALLBACK UnaryDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+        WCHAR szString[MAX_PATH];
+
+    case WM_INITDIALOG:
+    {
+        int BCAiterations = 0;
+
+        GetPrivateProfileString(L"UnaryDlg", L"BCAiterations",
+            L"6625", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_NUM_BCA_STEPS, szString);
+
+        GetPrivateProfileString(L"UnaryDlg", L"TextOutput1", L"C:\\MySETIBCA\\Data\\Results\\Unary.txt", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString);
+
+        int ResetWindows = GetPrivateProfileInt(L"GlobalSettings", L"ResetWindows", 0, (LPCTSTR)strAppNameINI);
+        if (!ResetWindows) {
+            CString csString = L"UnaryDlg";
+            RestoreWindowPlacement(hDlg, csString);
+        }
+
+        GetPrivateProfileString(L"UnaryDlg", L"LastValue", L"12", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_LAST_VALUE, szString);
+
+        GetPrivateProfileString(L"UnaryDlg", L"NumBits", L"80", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_NUM_BITS, szString);
+
+        return (INT_PTR)TRUE;
+    }
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+
+        case IDC_TEXT_OUTPUT1_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString, MAX_PATH);
+            COMDLG_FILTERSPEC textType[] =
+            {
+                 { L"text files", L"*.txt" },
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileSave(hDlg, szString, &pszFilename, FALSE, 2, textType, L"*.txt")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+            SetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString);
+            return (INT_PTR)TRUE;
+        }
+
+        case IDOK:
+        {
+            BOOL bSuccess;
+            int NumSteps;
+            int LastValue;
+            int NumBitsString;
+
+            NumSteps = GetDlgItemInt(hDlg, IDC_NUM_BCA_STEPS, &bSuccess, TRUE);
+            if (!bSuccess) {
+                MessageBox(hDlg, L"Invalid # iterations", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+            if (NumSteps < 0) {
+                MessageBox(hDlg, L"# iterations must be positive", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            NumBitsString = GetDlgItemInt(hDlg, IDC_NUM_BITS, &bSuccess, TRUE);
+            if (!bSuccess) {
+                MessageBox(hDlg, L"Invalid # bit string length", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+            if (NumBitsString < 10 || NumBitsString > 160) {
+                MessageBox(hDlg, L"Bit string length must be in range 10 to 160 ", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            LastValue = GetDlgItemInt(hDlg, IDC_LAST_VALUE, &bSuccess, TRUE);
+            if (!bSuccess) {
+                MessageBox(hDlg, L"Invalid # Last Unary value", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+            if (LastValue < 1 || LastValue > (NumBitsString-1)) {
+                MessageBox(hDlg, L"Last Value must be in range 1 to (Bit String Length - 1)", L"Bad Number", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            GetDlgItemText(hDlg, IDC_NUM_BCA_STEPS, szString, MAX_PATH);
+            WritePrivateProfileString(L"UnaryDlg", L"BCAiterations", szString, (LPCTSTR)strAppNameINI);
+
+            GetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString, MAX_PATH);
+            WritePrivateProfileString(L"UnaryDlg", L"TextOutput1", szString, (LPCTSTR)strAppNameINI);
+
+            GetDlgItemText(hDlg, IDC_LAST_VALUE, szString, MAX_PATH);
+            WritePrivateProfileString(L"UnaryDlg", L"LastValue", szString, (LPCTSTR)strAppNameINI);
+
+            GetDlgItemText(hDlg, IDC_NUM_BITS, szString, MAX_PATH);
+            WritePrivateProfileString(L"UnaryDlg", L"NumBits", szString, (LPCTSTR)strAppNameINI);
+
+            FILE* Out;
+            errno_t ErrNum;
+
+            ErrNum = _wfopen_s(&Out, szString, L"w");
+            if (Out == NULL) {
+                WCHAR NewMessage[MAX_PATH];
+                swprintf_s(NewMessage, MAX_PATH, L"Cpuld not create file:\n%s", szString);
+                MessageBox(hDlg, NewMessage, L"Unary Sequence message", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            int SeqCount = 0;
+            std::vector<std::vector<int>> combinations;
+
+            for (int i = 2; i <= NumSteps; i++) {
+                
+                // check if this can be encoded as a unary expression in 79 bits
+                combinations = factorCombinations(i);
+                // only need to look at first combination
+
+                int NumBits = 0;
+                auto& combination = combinations[0];
+                for (int factor : combination) {
+                    NumBits += factor;
+                }
+                if (NumBits == (NumBitsString-LastValue)) {
+                    SeqCount++;
+                    fprintf(Out, "%d: %d = ", SeqCount, i);
+                    int j = 0;
+                    for (int factor : combination) {
+                        if (j == 0) {
+                            fprintf(Out, "%d", factor);
+                        }
+                        else {
+                            fprintf(Out, " * %d", factor);
+                        }
+                        NumBits += factor;
+                        j++;
+                    }
+                    fprintf(Out, ", 12\n");
+                }
+
+                combinations.clear();
+            }
+
+            fclose(Out);
+
+            {
+                // save window position/size data
+                CString csString = L"UnaryDlg";
+                SaveWindowPlacement(hDlg, csString);
+            }
+
+            WCHAR NewMessage[MAX_PATH];
+            swprintf_s(NewMessage, MAX_PATH, L"Unary sequences complete, %d valid sequences", SeqCount);
+            MessageBox(hDlg, NewMessage, L"Unary Sequence message", MB_OK);
+
             return (INT_PTR)TRUE;
         }
 

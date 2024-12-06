@@ -124,6 +124,9 @@
 //                          Corrected an error in the the ASIS 'C' symbol in the library.
 //                              The image was clipped when it was copied.
 // V1.1.6   2024-11-25  Correction for EOF processing in reading text files and expecting an integer input
+// V1.1.7   2024-12-05  Added Unary sequence dialog
+//                      Records possible unary sequences of factors for possible iterations for the BCA which have
+//                      a specific last unary value in a fixed bit string length.
 // 
 //  This appliction stores user parameters in a Windows style .ini file
 //  The MySETIBCA.ini file must be in the same directory as the exectable
@@ -230,6 +233,7 @@ INT_PTR CALLBACK    BitImageDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 INT_PTR CALLBACK    MargolusBCADlg(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    ReceiveASISdlg(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    SendASISdlg(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK    UnaryDlg(HWND, UINT, WPARAM, LPARAM);
 
 //*******************************************************************************
 //
@@ -733,6 +737,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case IDM_SEND_ASIS:
         {
             DialogBox(hInst, MAKEINTRESOURCE(IDD_SEND_ASIS), hWnd, SendASISdlg);
+            break;
+        }
+
+        case IDM_UNARY:
+        {
+            DialogBox(hInst, MAKEINTRESOURCE(IDD_UNARY), hWnd, UnaryDlg);
             break;
         }
 
