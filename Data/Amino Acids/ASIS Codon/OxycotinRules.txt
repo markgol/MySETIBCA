@@ -1,0 +1,20 @@
+From: Discord user @Jason on ASIS chat
+
+Oxytocin is a small peptide human hormone. The DNA code for oxytocin is 3'-ACG-ATA-TAA-GTT-TTA-ACG-GGA-GAA-CCA-ACT-5'. The DNA would be transcribed into m-RNA reading DNA from 3' --> 5', creating m-RNA sequence that is 5' --> 3'. The m-RNA would then be read from the 5' --> 3' to produce the polypeptide oxytocin. Compliment nucleotides in the m-RNA are U for A, G for C, C for G, and A for T. For example the first codon in DNA ACG would transcribe to m-RNA as UGC. You would then use a m-RNA table to translate the m-RNA into the polypeptide. I'll post a table in a minute.
+
+Following @Jason's description above
+
+DNA	A C G - A T A - T A A - G T T - T T A - A C G - G G A - G A A - C C A - A C T
+mRNA	U G C - U A U - A U U - C A A - A A U - U G C - C C U - C U U - G G U - U G A
+
+
+To demonstrate this:
+
+Run MySETIBCA
+from menus Celluar Automata -> Generic Mealy FSM
+
+Set FSM input ini file to: C:\MySETIBCA\Data\Amino Acids\ASIS Codon\StandardRNACodon.ini
+click 'Load'
+Set the input sequence string to: U G C - U A U - A U U - C A A - A A U - U G C - C C U - C U U - G G U - U G A
+click 'Run'
+Results: -Cys-Tyr-Ile-Gln-Asn-Cys-Pro-Leu-Gly-STOP  (Oxycotin peptide)

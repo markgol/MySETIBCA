@@ -21,6 +21,7 @@
 #define IDD_RECEIVE_ASIS                175
 #define IDD_SEND_ASIS                   176
 #define IDD_UNARY                       177
+#define IDD_GENERIC_FSM                 178
 #define ID_UPDATE                       200
 #define ID_IMG_STATUSBAR                201
 #define ID_UPDATE_BCA_LAYER             202
@@ -136,6 +137,19 @@
 #define IDC_HISTO_FILE                  1242
 #define IDC_SAVE_STEP                   1243
 #define IDC_USE_STEPS                   1246
+#define IDC_FSM_INI                     1247
+#define IDC_FSM_INI_BROWSE              1248
+#define IDC_INPUT                       1249
+#define IDC_RESULTS                     1250
+#define IDC_INPUT_ALPHABET              1251
+#define IDC_OUTPUT_ALPHABET             1252
+#define IDC_RUN                         1253
+#define IDC_RULES_LIST                  1255
+#define IDC_RESET                       1256
+#define IDC_LOAD                        1257
+#define IDC_STATES_LIST                 1258
+#define IDC_CURRENT_STATE               1259
+#define IDC_CURRENT_OUTPUT              1260
 #define IDC_TEXT_INPUT1                 1310
 #define IDC_TEXT_INPUT1_BROWSE          1311
 #define IDC_RUN_BACKWARD                1312
@@ -152,7 +166,6 @@
 #define IDC_NUM_BCA_STEPS               1323
 #define IDC_NUM_BCA_STEPS2              1324
 #define IDC_NUM_BITS                    1324
-#define IDC_NUM_BITS2                   1325
 #define IDC_LAST_VALUE                  1325
 #define IDM_PROPERTIES_SETTINGS         32601
 #define IDM_SETTINGS                    32602
@@ -173,8 +186,8 @@
 #define IDM_CA_MBCA                     32642
 #define IDM_SEND_ASIS                   32645
 #define IDM_RECEIVE_ASIS                32646
-#define ID_ASIGNINSPACE_UNARYSEQUENCES  32647
 #define IDM_UNARY                       32648
+#define IDM_GENERIC_FSM                 32652
 #define IDM_RESET_ZOOM                  32783
 #define IDM_RESET_PAN                   32784
 #define IDM_CROSSHAIRS                  32789
@@ -187,8 +200,8 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        203
-#define _APS_NEXT_COMMAND_VALUE         32649
-#define _APS_NEXT_CONTROL_VALUE         1247
+#define _APS_NEXT_COMMAND_VALUE         32653
+#define _APS_NEXT_CONTROL_VALUE         1260
 #define _APS_NEXT_SYMED_VALUE           300
 #endif
 #endif

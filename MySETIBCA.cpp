@@ -127,6 +127,12 @@
 // V1.1.7   2024-12-05  Added Unary sequence dialog
 //                      Records possible unary sequences of factors for possible iterations for the BCA which have
 //                      a specific last unary value in a fixed bit string length.
+// V1.1.8	2024-12-18	Corrected errors in output file for unary calculations
+//                      Added Generic Finite State Machine dialog
+//                      Added Generic Finite State Machine class
+//						output rules special entries,
+//							<space>		a space character is output
+//							<no>		no output symbol (empty)
 // 
 //  This appliction stores user parameters in a Windows style .ini file
 //  The MySETIBCA.ini file must be in the same directory as the exectable
@@ -234,6 +240,7 @@ INT_PTR CALLBACK    MargolusBCADlg(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    ReceiveASISdlg(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    SendASISdlg(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    UnaryDlg(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK    GenericFSMdlg(HWND, UINT, WPARAM, LPARAM);
 
 //*******************************************************************************
 //
@@ -726,6 +733,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
 
             break;
+
+        case IDM_GENERIC_FSM:
+        {
+            DialogBox(hInst, MAKEINTRESOURCE(IDD_GENERIC_FSM), hWnd, GenericFSMdlg);
+            break;
+        }
 
 // ASIS menu 
         case IDM_RECEIVE_ASIS:

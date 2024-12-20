@@ -1,0 +1,24 @@
+Discord user @Jason on ASIS chat
+published a codon like table/wheel on chat as an interpretation of the ASIS AA map
+
+This is an FSM implementation of that table/wheel.
+
+To demonstrate this:
+
+Run MySETIBCA
+from menus Celluar Automata -> Generic Mealy FSM
+
+Set FSM input ini file to: C:\MySETIBCA\Data\Amino Acids\ASIS Codon\Jason1.ini
+click 'Load'
+
+Set the input sequence to: n1-b-n3-n2-n3-a-n3-n2-n2-b-n3-n2-b-b-n1-n3
+click 'Run'
+results:  n2 n3 n2 n2 b
+
+Set the input sequence to: n2-b-a-n1-a-n3-a-n1-n1-b-a-n1-b-b-n2-a
+click 'Run'
+results: n1 a n1 n1 b
+
+Set the input sequence to: n1,n2,a,b,n3,n1,n2,a,b,n3,n1,n2,a,b,n3,n1,n2,a,b,n3,n1,n2,a,b,n3,n1,n2,a,b,n3
+click 'Run'
+results:  n3 n2 n3 b n1 n3 n2 n3 b n1

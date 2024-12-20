@@ -47,10 +47,12 @@
 //                      Correction, filename extension  for send message corrected to default of .bin
 //                      Correction, default filename for footer was the header file
 //                      Correction, Receive ASIS message starting EvenStep = FALSE when # of iterations is even
-// V1.1.5  2024-11-08   Added save snapshot to each iteration.
-// V1.1.7  2024-12-05   Added Unary sequence dialog
+// V1.1.5   2024-11-08  Added save snapshot to each iteration.
+// V1.1.7   2024-12-05  Added Unary sequence dialog
 //                      Records possible unary sequences of factors for possible iterations for the BCA which have
 //                      a specific last unary value in a fixed bit string length.
+// V1.1.8   2024-12-18  Corrected errors in output file for unary calculations
+//                      Added Generic Finite State Machine dialog
 // 
 // Cellular Automata tools dialog box handlers
 // 
@@ -80,8 +82,13 @@
 #include "CA.h"
 #include "FileFunctions.h"
 #include "shellapi.h"
+#include "GenericFSM.h"
 
 BOOL NewHistoFile = TRUE;
+GenericFSM* MyFSM = nullptr;
+
+void ResetTheFSM(HWND hDlg, BOOL ClearResults);
+int ProcessSequenceUsingFSM(HWND hDlg, WCHAR* Sequence, size_t MaxSeqLength);
 
 // Add new callback prototype declarations in my MySETIBCA.cpp
 
@@ -1702,7 +1709,7 @@ INT_PTR CALLBACK SendASISdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
 
 //*******************************************************************************
 //
-// Message handler for SendASISdlg dialog box.
+// Message handler for UnaryDlg dialog box.
 // 
 //*******************************************************************************
 INT_PTR CALLBACK UnaryDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
@@ -1801,14 +1808,14 @@ INT_PTR CALLBACK UnaryDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
             GetDlgItemText(hDlg, IDC_NUM_BCA_STEPS, szString, MAX_PATH);
             WritePrivateProfileString(L"UnaryDlg", L"BCAiterations", szString, (LPCTSTR)strAppNameINI);
 
-            GetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString, MAX_PATH);
-            WritePrivateProfileString(L"UnaryDlg", L"TextOutput1", szString, (LPCTSTR)strAppNameINI);
-
             GetDlgItemText(hDlg, IDC_LAST_VALUE, szString, MAX_PATH);
             WritePrivateProfileString(L"UnaryDlg", L"LastValue", szString, (LPCTSTR)strAppNameINI);
 
             GetDlgItemText(hDlg, IDC_NUM_BITS, szString, MAX_PATH);
             WritePrivateProfileString(L"UnaryDlg", L"NumBits", szString, (LPCTSTR)strAppNameINI);
+
+            GetDlgItemText(hDlg, IDC_TEXT_OUTPUT1, szString, MAX_PATH);
+            WritePrivateProfileString(L"UnaryDlg", L"TextOutput1", szString, (LPCTSTR)strAppNameINI);
 
             FILE* Out;
             errno_t ErrNum;
@@ -1849,7 +1856,7 @@ INT_PTR CALLBACK UnaryDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
                         NumBits += factor;
                         j++;
                     }
-                    fprintf(Out, ", 12\n");
+                    fprintf(Out, ", %d\n", LastValue);
                 }
 
                 combinations.clear();
@@ -1880,4 +1887,483 @@ INT_PTR CALLBACK UnaryDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
     }
 
     return (INT_PTR)FALSE;
+}
+
+//*******************************************************************************
+//
+// Message handler for GenericFSMdlg dialog box.
+// 
+//*******************************************************************************
+INT_PTR CALLBACK GenericFSMdlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+        WCHAR szString[MAX_PATH];
+
+    case WM_INITDIALOG:
+    {
+        if (MyFSM == NULL) {
+            MyFSM = new GenericFSM;
+            if (MyFSM == nullptr) {
+                MessageBox(hDlg, L"Could not create GenericFSM class", L"Fatal Error", MB_OK);
+                EndDialog(hDlg, LOWORD(wParam));
+                return (INT_PTR)TRUE;
+            }
+        }
+
+        GetPrivateProfileString(L"GenericFSMdlg", L"InputSeq", L"n1-b-n3-n2-n3-a-n3-n2-n2-b-n3-n2-b-b-n1-n3", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_INPUT, szString);
+
+        GetPrivateProfileString(L"GenericFSMdlg", L"FSMini", L"C:\MySETIBCA\Data\Amino Acids\ASIS Codon\Jason1.ini", szString, MAX_PATH, (LPCTSTR)strAppNameINI);
+        SetDlgItemText(hDlg, IDC_FSM_INI, szString);
+
+        int ResetWindows = GetPrivateProfileInt(L"GlobalSettings", L"ResetWindows", 0, (LPCTSTR)strAppNameINI);
+        if (!ResetWindows) {
+            CString csString = L"GenericFSMdlg";
+            RestoreWindowPlacement(hDlg, csString);
+        }
+
+        SetDlgItemText(hDlg, IDC_RESULTS, L"");
+
+        HWND ItemHandle = GetDlgItem(hDlg, IDC_RUN);
+        EnableWindow(ItemHandle, FALSE);
+
+        ItemHandle = GetDlgItem(hDlg, IDC_RESET);
+        EnableWindow(ItemHandle, FALSE);
+
+        return (INT_PTR)TRUE;
+    }
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+
+        case IDC_FSM_INI_BROWSE:
+        {
+            PWSTR pszFilename;
+            GetDlgItemText(hDlg, IDC_FSM_INI, szString, MAX_PATH);
+            COMDLG_FILTERSPEC textType[] =
+            {
+                 { L"text files", L"*.ini" },
+                 { L"All Files", L"*.*" },
+            };
+            if (!CCFileOpen(hDlg, szString, &pszFilename, FALSE, 2, textType, L"*.ini")) {
+                return (INT_PTR)TRUE;
+            }
+            {
+                wcscpy_s(szString, pszFilename);
+                CoTaskMemFree(pszFilename);
+            }
+
+            SetDlgItemText(hDlg, IDC_FSM_INI, szString);
+
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_RUN:
+        {
+            // only enabled after FSM is loaded
+            WCHAR Sequence[MAX_SYMBOL_SIZE*4];
+            GetDlgItemText(hDlg, IDC_INPUT, Sequence, MAX_SYMBOL_SIZE * 4);
+
+            ResetTheFSM(hDlg,TRUE); // reset FSM and clear the results
+
+            ProcessSequenceUsingFSM(hDlg, Sequence, MAX_SYMBOL_SIZE * 4);
+
+            ResetTheFSM(hDlg, FALSE); // reset FSM and leave the results
+
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_LOAD:
+        {
+            GetDlgItemText(hDlg, IDC_FSM_INI, szString, MAX_PATH);
+            WritePrivateProfileString(L"GenericFSMdlg", L"FSMini", szString, (LPCTSTR)strAppNameINI);
+
+            int Warnings;
+            int iRet;
+
+            iRet = MyFSM->LoadFSM(szString, &Warnings);
+
+            if (iRet != APP_SUCCESS) {
+                if ((Warnings & ERROR_FSM_NO_START_STATE) != 0) {
+                    MessageBox(hDlg, L"FSM is missing the start=state\nin the [states] section", L"Generic FSM", MB_OK);
+                }
+
+                if ((Warnings & ERROR_FSM_NO_INPUTS) != 0) {
+                    MessageBox(hDlg, L"FSM is missing [inputs] section", L"Generic FSM", MB_OK);
+                }
+
+                if ((Warnings & ERROR_FSM_NO_OUTPUTS) != 0) {
+                    MessageBox(hDlg, L"FSM is missing the [outputs] section", L"Generic FSM", MB_OK);
+                }
+
+                if ((Warnings & ERROR_FSM_NO_STATES) != 0) {
+                    MessageBox(hDlg, L"FSM is missing the [states] section", L"Generic FSM", MB_OK);
+                }
+
+                if ((Warnings & ERROR_FSM_NO_STATE_RULES) != 0) {
+                    MessageBox(hDlg, L"FSM is missing the [next_state_rules] section", L"Generic FSM", MB_OK);
+                }
+
+                if ((Warnings & ERROR_FSM_NO_OUTPUT_RULES) != 0) {
+                    MessageBox(hDlg, L"FSM is missing the [output_rules] section", L"Generic FSM", MB_OK);
+                }
+
+                MessageBox(hDlg, L"Failed to load FSM, check ini file", L"Generic FSM", MB_OK);
+                return (INT_PTR)TRUE;
+            }
+
+            if(Warnings != 0) {
+                MessageBox(hDlg, L"Warnings, FSM incomplete, check ini file", L"Generic FSM", MB_OK);
+            }
+
+            //
+            // load input alphabet listbox
+            // 
+            HWND hwndList = GetDlgItem(hDlg, IDC_INPUT_ALPHABET);
+            // clear listbox contents
+            SendMessage(hwndList, LB_RESETCONTENT, 0, 0);
+            int NumInputs = MyFSM->GetNumInputAlphabet();
+            for (int i = 0; i < NumInputs; i++)
+            {
+                WCHAR Label[MAX_SYMBOL_SIZE];
+                int index;
+
+                MyFSM->GetInputAlphabetLabel(i, Label, MAX_SYMBOL_SIZE);
+
+                index = (int)SendMessage(hwndList, LB_ADDSTRING, 0, (LPARAM)Label);
+                // Set the array index of the StateLabel as item data.
+                // This enables us to retrieve the item from the array
+                // even after the items are sorted by the list box.
+                SendMessage(hwndList, LB_SETITEMDATA, index, (LPARAM)i);
+            }
+
+            //
+            // load output alphabet listbox
+            //
+            hwndList = GetDlgItem(hDlg, IDC_OUTPUT_ALPHABET);
+            // clear listbox contents
+            SendMessage(hwndList, LB_RESETCONTENT, 0, 0);
+            int NumOutputs = MyFSM->GetNumOutputAlpabet();
+            for (int i = 0; i < NumOutputs; i++)
+            {
+                WCHAR Label[MAX_SYMBOL_SIZE];
+                int index;
+
+                MyFSM->GetOutputAlphabetLabel(i, Label, MAX_SYMBOL_SIZE);
+                if (MyFSM->IsOutputUsed(i)) {
+                    index = (int)SendMessage(hwndList, LB_ADDSTRING, 0, (LPARAM)Label);
+                } else {
+                    WCHAR Bad[MAX_SYMBOL_SIZE * 2];
+                    swprintf_s(Bad, MAX_SYMBOL_SIZE * 2, L"%d=%s, not used", i, Label);
+                    index = (int)SendMessage(hwndList, LB_ADDSTRING, 0, (LPARAM)Bad);
+                }
+                // Set the array index of the StateLabel as item data.
+                // This enables us to retrieve the item from the array
+                // even after the items are sorted by the list box.
+                SendMessage(hwndList, LB_SETITEMDATA, index, (LPARAM)i);
+            }
+
+            // load state symbol listbox
+            // IDC_STATES_LIST
+            hwndList = GetDlgItem(hDlg, IDC_STATES_LIST);
+            // clear listbox contents
+            SendMessage(hwndList, LB_RESETCONTENT, 0, 0);
+            int NumStates = MyFSM->GetNumStates();
+            for (int i = 0; i < NumStates; i++)
+            {
+                WCHAR Label[MAX_SYMBOL_SIZE];
+                int index;
+
+                MyFSM->GetStateLabel(i, Label, MAX_SYMBOL_SIZE);
+                if (MyFSM->IsStateUsed(i)) {
+                    index = (int)SendMessage(hwndList, LB_ADDSTRING, 0, (LPARAM)Label);
+                }
+                else {
+                    WCHAR Bad[MAX_SYMBOL_SIZE * 2];
+                    swprintf_s(Bad, MAX_SYMBOL_SIZE * 2, L"%d=%s,Unreachable", i, Label);
+                    index = (int)SendMessage(hwndList, LB_ADDSTRING, 0, (LPARAM)Bad);
+                }
+                // Set the array index of the StateLabel as item data.
+                // This enables us to retrieve the item from the array
+                // even after the items are sorted by the list box.
+                SendMessage(hwndList, LB_SETITEMDATA, index, (LPARAM)i);
+            }
+
+            // load state/output rules listbox
+            // IDC_RULES_LIST
+            
+            hwndList = GetDlgItem(hDlg, IDC_RULES_LIST);
+            // clear listbox contents
+            SendMessage(hwndList, LB_RESETCONTENT, 0, 0);
+            for (int i = 0; i < NumStates; i++) {
+                for(int j=0; j<NumInputs; j++) {
+                    WCHAR Label[MAX_SYMBOL_SIZE*5];
+                    WCHAR OutputSymbol[MAX_SYMBOL_SIZE];
+                    WCHAR NextStateSymbol[MAX_SYMBOL_SIZE];
+                    WCHAR StateSymbol[MAX_SYMBOL_SIZE];
+                    WCHAR InputSymbol[MAX_SYMBOL_SIZE];
+                    WCHAR Unreachable[MAX_SYMBOL_SIZE];
+
+                    int index;
+                    int NextState;
+                    int Output;
+                   
+                    if (!MyFSM->IsStateUsed(i)) {
+                        wcscpy_s(Unreachable, MAX_SYMBOL_SIZE, L"Unreachable: ");
+                    } else {
+                        wcscpy_s(Unreachable, MAX_SYMBOL_SIZE, L"");
+                    }
+                    NextState = MyFSM->GetNextStateRule(i, j);
+                    Output = MyFSM->GetOuputRule(i, j);
+                    MyFSM->GetOutputAlphabetLabel(Output, OutputSymbol, MAX_SYMBOL_SIZE);
+                    MyFSM->GetStateLabel(NextState, NextStateSymbol, MAX_SYMBOL_SIZE);
+                    MyFSM->GetInputAlphabetLabel(j, InputSymbol, MAX_SYMBOL_SIZE);
+                    MyFSM->GetStateLabel(i, StateSymbol, MAX_SYMBOL_SIZE);
+
+                    // 4 possibilities
+                    if (NextState >= 0 && Output >= 0) {
+                        // valid entry for both next state and output
+                        swprintf_s(Label, MAX_SYMBOL_SIZE * 5, L"%s%d.%d:%s.%s -> (%d:%s) out=%s", Unreachable, i, j, StateSymbol, InputSymbol, NextState, NextStateSymbol, OutputSymbol);
+                    } else if (NextState >= 0 && Output < 0) {
+                        // valid entry for next state, invalid entry for output
+                        swprintf_s(Label, MAX_SYMBOL_SIZE * 5, L"%s%d.%d:%s.%s -> (%d:%s) out=%s", Unreachable, i, j, StateSymbol, InputSymbol, NextState, NextStateSymbol, L"*invalid*");
+                    }
+                    else if (NextState < 0 && Output >= 0) {
+                        // next state invalid and output is valid
+                        swprintf_s(Label, MAX_SYMBOL_SIZE * 5, L"%s%d.%d:%s.%s -> (%d:%s) out=%s", Unreachable, i, j, StateSymbol, InputSymbol, NextState, L"*invalid*", OutputSymbol);
+                    } else {
+                        // both next state and output are invalid
+                        swprintf_s(Label, MAX_SYMBOL_SIZE * 5, L"%s%d.%d:%s.%s -> (%d:%s) out=%s", Unreachable, i, j, StateSymbol, InputSymbol, NextState, L"*invalid*", L"*invalid*");
+                    }
+
+                    index = (int)SendMessage(hwndList, LB_ADDSTRING, 0, (LPARAM)Label);
+                    // Set the array index of the StateLabel as item data.
+                    // This enables us to retrieve the item from the array
+                    // even after the items are sorted by the list box.
+                    SendMessage(hwndList, LB_SETITEMDATA, index, (LPARAM)i);
+                }
+            }
+            
+            // set current state status box
+            // IDC_CURRENT_STATE
+            {
+                int index;
+                index = MyFSM->GetCurrentStateIndex();
+                if (index >= 0) {
+                    WCHAR Symbol[MAX_SYMBOL_SIZE];
+                    MyFSM->GetStateLabel(index, Symbol, MAX_SYMBOL_SIZE);
+                    SetDlgItemText(hDlg, IDC_CURRENT_STATE, Symbol);
+                } else {
+                    SetDlgItemText(hDlg, IDC_CURRENT_STATE, L"<invalid>");
+                }
+            }
+
+            // set current output status box
+            // IDC_CURRENT_OUTPUT
+            {
+                int iRet;
+                WCHAR Symbol[MAX_SYMBOL_SIZE];
+                iRet = MyFSM->GetCurrentOutput(Symbol, MAX_SYMBOL_SIZE);
+                if (iRet==APP_SUCCESS) {
+                    SetDlgItemText(hDlg, IDC_CURRENT_OUTPUT, Symbol);
+                } else {
+                    SetDlgItemText(hDlg, IDC_CURRENT_OUTPUT, L"<invalid>");
+                }
+            }
+
+            HWND ItemHandle = GetDlgItem(hDlg, IDC_RUN);
+            EnableWindow(ItemHandle, TRUE);
+
+            ItemHandle = GetDlgItem(hDlg, IDC_RESET);
+            EnableWindow(ItemHandle, TRUE);
+
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_RESET:
+        {
+            ResetTheFSM(hDlg, TRUE);
+
+            return (INT_PTR)TRUE;
+        }
+
+        case IDC_INPUT_ALPHABET:
+        {
+            // Step the FSM with the input selected by a double click on the input alphabet
+
+            if (HIWORD(wParam) == LBN_DBLCLK) {
+                HWND ItemHandle = GetDlgItem(hDlg, IDC_INPUT_ALPHABET);
+                int index = (int)SendMessage(ItemHandle, LB_GETCURSEL, 0, 0);
+                MyFSM->StepFSM(index);
+
+                // update the current state text box
+                index = MyFSM->GetCurrentStateIndex();
+                if (index >= 0) {
+                    WCHAR Symbol[MAX_SYMBOL_SIZE];
+                    MyFSM->GetStateLabel(index, Symbol, MAX_SYMBOL_SIZE);
+                    SetDlgItemText(hDlg, IDC_CURRENT_STATE, Symbol);
+                }
+                else {
+                    SetDlgItemText(hDlg, IDC_CURRENT_STATE, L"<invalid>");
+                }
+
+                // update the current output text box
+                // and the results text box
+
+                WCHAR Symbol[MAX_SYMBOL_SIZE];
+                WCHAR Results[MAX_SYMBOL_SIZE * 2];
+                GetDlgItemText(hDlg, IDC_RESULTS, Results, MAX_SYMBOL_SIZE * 2);
+
+                int iRet = MyFSM->GetCurrentOutput(Symbol, MAX_SYMBOL_SIZE);
+                if (iRet == APP_SUCCESS) {
+                    // Append the current output to the contents of the results text box
+                    if (wcscmp(Symbol, L"<space>") == 0) {
+                        wcscat_s(Results, MAX_SYMBOL_SIZE * 2, L" ");
+                    }
+                    else if (wcscmp(Symbol, L"<no>") != 0) {
+                        wcscat_s(Results, MAX_SYMBOL_SIZE * 2, Symbol);
+                    } // if this was <no> do not generate output
+                }
+                else {
+                    // Append the current output to the contents of the results text box
+                    wcscat_s(Results, MAX_SYMBOL_SIZE * 2, L"<invalid>");
+                }
+
+                SetDlgItemText(hDlg, IDC_RESULTS, Results);
+
+            }
+            return(INT_PTR)TRUE;
+        }
+
+        case IDOK:
+        {
+            GetDlgItemText(hDlg, IDC_INPUT, szString, MAX_PATH);
+            WritePrivateProfileString(L"GenericFSMdlg", L"InputSeq", szString, (LPCTSTR)strAppNameINI);
+
+            GetDlgItemText(hDlg, IDC_FSM_INI, szString, MAX_PATH);
+            WritePrivateProfileString(L"GenericFSMdlg", L"FSMini", szString, (LPCTSTR)strAppNameINI);
+
+            {
+                // save window position/size data
+                CString csString = L"GenericFSMdlg";
+                SaveWindowPlacement(hDlg, csString);
+            }
+
+            // delete FSM class
+            if (MyFSM != nullptr) {
+                delete MyFSM;
+                MyFSM = nullptr;
+            }
+
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+
+        case IDCANCEL:
+        {
+            // delete FSM class
+            if (MyFSM != nullptr) {
+                delete MyFSM;
+                MyFSM = nullptr;
+            }
+
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+
+        }
+    }
+
+    return (INT_PTR)FALSE;
+}
+
+//*******************************************************************************
+//
+// Helper function for GenericFSMdlg dialog box.
+// 
+//*******************************************************************************
+void ResetTheFSM(HWND hDlg,BOOL ClearResults)
+{
+    MyFSM->ResetFSM();
+    // set current state status box
+    WCHAR Symbol[MAX_SYMBOL_SIZE];
+    int State = MyFSM->GetCurrentStateIndex();
+    if (State < 0) {
+        SetDlgItemText(hDlg, IDC_CURRENT_STATE, L"<invalid>");
+    }
+    else {
+        MyFSM->GetStateLabel(State, Symbol, MAX_SYMBOL_SIZE);
+        SetDlgItemText(hDlg, IDC_CURRENT_STATE, Symbol);
+    }
+
+    // set current output status box
+    MyFSM->GetCurrentOutput(Symbol, MAX_SYMBOL_SIZE);
+    SetDlgItemText(hDlg, IDC_CURRENT_OUTPUT, Symbol);
+
+    // clear the results box
+    if (ClearResults) {
+        SetDlgItemText(hDlg, IDC_RESULTS, L"");
+    }
+
+    return;
+}
+
+//*******************************************************************************
+//
+// Helper function for GenericFSMdlg dialog box.
+// 
+//*******************************************************************************
+int ProcessSequenceUsingFSM(HWND hDlg, WCHAR* Sequence, size_t MaxSeqLength)
+{
+    // use comma separated input string
+    // process each input until none are left
+    // save results to the Results string text box
+    // token separators can be ,<space>,-
+
+    WCHAR* Token = NULL;
+    WCHAR* NextToken = NULL;
+    WCHAR Delimiters[MAX_SYMBOL_SIZE];
+
+    int iRet = MyFSM->GetDelimiters(Delimiters, MAX_SYMBOL_SIZE);
+    if (iRet != APP_SUCCESS) {
+        MessageBox(hDlg, L"Missing delimters definition\nCheck FSM ini file", L"Run FSM", MB_OK);
+        return APPERR_PARAMETER;
+    }
+
+    Token = wcstok_s(Sequence, Delimiters, &NextToken);
+    while (Token != NULL) {
+        iRet = MyFSM->StepFSM(Token);
+
+        if (iRet != APP_SUCCESS) {
+            WCHAR Message[MAX_SYMBOL_SIZE];
+            swprintf_s(Message, MAX_SYMBOL_SIZE, L"Bad input symbol: %s\nnot found in input alphabet\nterminating run", Token);
+            MessageBox(hDlg,Message,L"Run FSM",MB_OK);
+            return APPERR_PARAMETER;
+        }
+        WCHAR Symbol[MAX_SYMBOL_SIZE];
+        WCHAR Results[MAX_SYMBOL_SIZE * 2];
+        GetDlgItemText(hDlg, IDC_RESULTS, Results, MAX_SYMBOL_SIZE * 2);
+
+        iRet = MyFSM->GetCurrentOutput(Symbol, MAX_SYMBOL_SIZE);
+        if (iRet == APP_SUCCESS) {
+            // Append the current output to the contents of the results text box
+            if (wcscmp(Symbol, L"<space>") == 0) {
+                wcscat_s(Results, MAX_SYMBOL_SIZE * 2, L" ");
+            } else if (wcscmp(Symbol, L"<no>") != 0) {
+                wcscat_s(Results, MAX_SYMBOL_SIZE * 2, Symbol);
+            } // if this was <no> do not generate output
+        }
+        else {
+            // Append the current output to the contents of the results text box
+            wcscat_s(Results, MAX_SYMBOL_SIZE * 2, L"<invalid>");
+        }
+
+        SetDlgItemText(hDlg, IDC_RESULTS, Results);
+
+        Token = wcstok_s(NULL, Delimiters, &NextToken);
+    }
+
+    return APP_SUCCESS;
 }

@@ -54,6 +54,9 @@
     <ClInclude Include="CA.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="GenericFSM.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MySETIBCA.cpp">
@@ -96,6 +99,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="CAdialogs.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GenericFSM.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
